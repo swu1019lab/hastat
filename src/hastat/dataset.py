@@ -44,8 +44,7 @@ class DataSet(object):
     def set_phe(self, phe_file=None):
         """Load a csv file contained phenotype data of samples
 
-        Args:
-            phe_file (str): a csv file
+        :param phe_file: a csv file contained phenotype data of samples
         """
         if phe_file is not None:
             print("Loading the phenotype data...")
@@ -56,11 +55,10 @@ class DataSet(object):
             self.pheno_num = self.phe_in.shape[1] - 1
             self.pheno_name = self.phe_in.columns[1:]
 
-    def set_gff(self, gff_file):
+    def set_gff(self, gff_file=None):
         """Load a gff file
 
-        Args:
-            gff_file (string): gene annotation file
+        :param gff_file: a gff file contained gene annotation data
         """
         # Create FeatureDB object
         print("Loading the annotation data...")
@@ -73,8 +71,7 @@ class DataSet(object):
     def set_vcf(self, vcf_file):
         """Load a vcf file
 
-        Args:
-            vcf_file (string): The Variant Call Format
+        :param vcf_file: a vcf file contained genotype data
         """
         print("Loading the genotype data...")
         self.vcf_in = VariantFile(vcf_file, threads=10)
@@ -83,16 +80,14 @@ class DataSet(object):
     def get_all_samples(self):
         """Return all samples name from VCF file
 
-        Returns:
-            list: a list contained all samples name
+        :return: a list contained all samples name
         """
         return list(self.vcf_in.header.samples)
 
     def get_all_genes(self):
         """Return all genes name
 
-        Returns:
-            Generator: a generator that can be used for iterating all `Feature` objects
+        :return: a generator contained all genes name
         """
         return self.gff_in.all_features(featuretype='mRNA')
 
@@ -100,8 +95,8 @@ class DataSet(object):
         """
         Get the gene object
 
-        :param gene_id:
-        :return:
+        :param gene_id: gene id
+        :return: GeneData object
         """
         if gene_id is not None:
             return GeneData(gene_id, self.gff_in)
@@ -175,10 +170,10 @@ class DataSet(object):
         """
         Get the genotype data of gene
 
-        :param gene_id: gene id
-        :param upstream:  upstream length of gene, default is 0
-        :param downstream:  downstream length of gene, default is 0
-        :return:  GenoData object
+        :param gene_id:gene id
+        :param upstream: upstream length of gene, default is 0
+        :param downstream: downstream length of gene, default is 0
+        :return: GenoData object
         """
         assert gene_id is not None, "gene_id is a required input parameter"
         # access a gene
