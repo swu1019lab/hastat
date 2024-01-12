@@ -51,13 +51,13 @@ class GeneData(object):
         """
         return list(self.gff_in.featuretypes())
 
-    def get_feature_data(self, featuretype='CDS'):
-        print("Retrieving {} data of {} from FeatureDB".format(featuretype, self.id))
+    def get_feature_data(self, feature_type='CDS'):
+        print("Retrieving {} data of {} from FeatureDB".format(feature_type, self.id))
         return np.array([[f.start, f.end] for f in self.gff_in.region(
             seqid=self.chrom_name,
             start=self.chrom_start,
             end=self.chrom_end,
-            featuretype=featuretype
+            featuretype=feature_type
         )])
 
     def to_gff(self, file_path=None):
@@ -65,7 +65,7 @@ class GeneData(object):
         Write the gene data to gff file
 
         :param file_path: the path of gff file
-        :return:
+        :return: None
         """
         if file_path is None:
             file_path = "{}.gff".format(self.id)
