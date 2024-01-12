@@ -11,10 +11,11 @@ from statsmodels.sandbox.stats.multicomp import MultiComparison
 
 
 class StatData(object):
-    """return statistic results of oneway anova and multiple comparisons
+    """
+    a class for oneway anova and multi-comparison
     """
 
-    def __init__(self, pheno, groups) -> None:
+    def __init__(self, pheno, groups):
         """_summary_
 
         Args:
