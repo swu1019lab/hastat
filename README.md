@@ -1,4 +1,4 @@
 hastat
 
-An easy to perform gene haplotypes analysis in Python.
+An easy library to perform gene haplotypes analysis in Python.
 
