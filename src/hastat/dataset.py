@@ -5,6 +5,8 @@
 # @File    : dataset.py
 
 import os
+import logging
+from typing import Generator
 import gffutils
 import numpy as np
 import pandas as pd
@@ -19,8 +21,10 @@ class DataSet(object):
     A class for loading data from VCF, GFF and CSV files
     """
 
-    def __init__(self, vcf_file, gff_file, phe_file) -> None:
+    def __init__(self, vcf_file: str, gff_file: str, phe_file: str) -> None:
         """
+        Initialize the DataSet object
+
         :param vcf_file: a vcf file contained genotype data
         :param gff_file: a gff file contained gene annotation data
         :param phe_file: a csv file contained phenotype data
@@ -41,8 +45,9 @@ class DataSet(object):
         fmt = "DataSet(samples number=%d, gene number=%d, phenotypes=%d)"
         return fmt % pars
 
-    def set_phe(self, phe_file=None):
-        """Load a csv file contained phenotype data of samples
+    def set_phe(self, phe_file=None) -> None:
+        """
+        Load a csv file contained phenotype data of samples
 
         :param phe_file: a csv file contained phenotype data of samples
         """
@@ -56,17 +61,22 @@ class DataSet(object):
             self.pheno_name = self.phe_in.columns[1:]
 
     def set_gff(self, gff_file=None):
-        """Load a gff file
+        """
+        Load a gff file
 
         :param gff_file: a gff file contained gene annotation data
         """
         # Create FeatureDB object
-        print("Loading the annotation data...")
-        if os.path.exists(gff_file + '.sqlite3'):
-            self.gff_in = gffutils.FeatureDB(gff_file + '.sqlite3')
-        else:
-            self.gff_in = gffutils.create_db(gff_file, gff_file + '.sqlite3')
-        self.genes_num = self.gff_in.count_features_of_type(featuretype='mRNA')
+        logging.info("Loading the annotation data...")
+        try:
+            if os.path.exists(gff_file + '.sqlite3'):
+                self.gff_in = gffutils.FeatureDB(gff_file + '.sqlite3')
+            else:
+                self.gff_in = gffutils.create_db(gff_file, gff_file + '.sqlite3')
+            self.genes_num = self.gff_in.count_features_of_type(featuretype='mRNA')
+        except FileNotFoundError:
+            logging.error(f"Error: {gff_file} not found!")
+            raise
 
     def set_vcf(self, vcf_file):
         """Load a vcf file
@@ -185,7 +195,7 @@ class DataSet(object):
         if gene_geno:
             return gene_geno
 
-    def get_all_genes_geno(self):
+    def get_all_genes_geno(self) -> Generator[GenoData, None, None]:
         """
         Get the genotype data of all genes
 
