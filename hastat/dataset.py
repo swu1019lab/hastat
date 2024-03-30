@@ -5,7 +5,6 @@
 # @File    : dataset.py
 
 import os
-import logging
 from typing import Generator
 import gffutils
 import numpy as np
@@ -14,6 +13,7 @@ from collections import defaultdict
 from pysam import VariantFile
 from .geno import GenoData
 from .gene import GeneData
+from hastat.hastat import logger
 
 
 class DataSet(object):
@@ -52,11 +52,11 @@ class DataSet(object):
         :param phe_file: a csv file contained phenotype data of samples
         """
         if phe_file is not None:
-            print("Loading the phenotype data...")
+            logger.info("Loading the phenotype data...")
             # two columns at least, samples (fixed) and other traits name
             self.phe_in = pd.read_csv(phe_file)
-            print("The number of input samples and traits from phenotype data:",
-                  self.phe_in.shape[0], self.phe_in.shape[1] - 1)
+            logger.info("The number of input samples and traits from phenotype data:",
+                        self.phe_in.shape[0], self.phe_in.shape[1] - 1)
             self.pheno_num = self.phe_in.shape[1] - 1
             self.pheno_name = self.phe_in.columns[1:]
 
@@ -67,7 +67,7 @@ class DataSet(object):
         :param gff_file: a gff file contained gene annotation data
         """
         # Create FeatureDB object
-        logging.info("Loading the annotation data...")
+        logger.info("Loading the annotation data...")
         try:
             if os.path.exists(gff_file + '.sqlite3'):
                 self.gff_in = gffutils.FeatureDB(gff_file + '.sqlite3')
@@ -75,7 +75,7 @@ class DataSet(object):
                 self.gff_in = gffutils.create_db(gff_file, gff_file + '.sqlite3')
             self.genes_num = self.gff_in.count_features_of_type(featuretype='mRNA')
         except FileNotFoundError:
-            logging.error(f"Error: {gff_file} not found!")
+            logger.error(f"Error: {gff_file} not found!")
             raise
 
     def set_vcf(self, vcf_file):
@@ -83,8 +83,8 @@ class DataSet(object):
 
         :param vcf_file: a vcf file contained genotype data
         """
-        print("Loading the genotype data...")
-        self.vcf_in = VariantFile(vcf_file, threads=10)
+        logger.info("Loading the genotype data...")
+        self.vcf_in = VariantFile(vcf_file, threads=1)
         self.samples_num = len(list(self.vcf_in.header.samples))
 
     def get_all_samples(self):
@@ -121,7 +121,8 @@ class DataSet(object):
         :param feature_type: feature type, default is mRNA
         :return: a numpy array contained feature loci
         """
-        print("Retrieving {} data of {}:{}-{} from database".format(feature_type, chrom_name, chrom_start, chrom_end))
+        logger.info(
+            "Retrieving {} data of {}:{}-{} from database".format(feature_type, chrom_name, chrom_start, chrom_end))
         return np.array([[f.start, f.end] for f in self.gff_in.region(
             seqid=chrom_name,
             start=chrom_start,
@@ -150,11 +151,11 @@ class DataSet(object):
         try:
             _ = next(self.vcf_in.fetch(chrom_name, chrom_start, chrom_end))
         except StopIteration:
-            print("Warning: No SNP loci existed in target region!")
+            logger.warning("No SNP loci existed in target region!")
             return None
         except ValueError as e:
-            print("Warning: {}".format(e))
-            print("\tAn error occurred in {}:{}-{}".format(chrom_name, chrom_start, chrom_end))
+            logger.error("{}".format(e))
+            logger.error("\tAn error occurred in {}:{}-{}".format(chrom_name, chrom_start, chrom_end))
             return None
         else:
             for rec in self.vcf_in.fetch(chrom_name, chrom_start, chrom_end):
@@ -190,7 +191,7 @@ class DataSet(object):
         gene = self.gff_in[gene_id]
         # get the locus of gene based on strand
         start, end = self.get_gene(gene_id).get_locus(upstream, downstream)
-        print("Getting the gene genotype of {} from {}:{}-{}".format(gene.id, gene.seqid, start, end))
+        logger.info("Getting the gene genotype of {} from {}:{}-{}".format(gene.id, gene.seqid, start, end))
         gene_geno = self.get_geno(gene.seqid, start, end)
         if gene_geno:
             return gene_geno
@@ -227,7 +228,8 @@ class DataSet(object):
                 gene.end, gene.end + promoter)
             if chrom_start < 0:
                 chrom_start = 0
-        print("Getting the promoter genotype of {} from {}:{}-{}".format(gene.id, chrom_name, chrom_start, chrom_end))
+        logger.info(
+            "Getting the promoter genotype of {} from {}:{}-{}".format(gene.id, chrom_name, chrom_start, chrom_end))
         promoter_geno = self.get_geno(chrom_name, chrom_start, chrom_end)
         if promoter_geno:
             return promoter_geno

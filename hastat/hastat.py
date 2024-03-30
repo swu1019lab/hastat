@@ -14,7 +14,8 @@ from .dataset import DataSet
 from .stat import HapAnovaTest
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def worker(args, out_dir, gid):
@@ -34,7 +35,7 @@ def worker(args, out_dir, gid):
         # Get genotype object of gene
         geno = db.get_gene_geno(gid, upstream=args.up, downstream=args.down)
         if geno is None:
-            logging.warning("\tFailed to retrieve results of {}!!!\n".format(gid))
+            logger.warning("\tFailed to retrieve results of {}!!!\n".format(gid))
         else:
             # Get haplotypes data of gene
             hap = geno.get_hap_data()
@@ -45,7 +46,7 @@ def worker(args, out_dir, gid):
         end = time.time()
         return "{} runs {:.2f} seconds for {}\n".format(current_process().name, (end - start), gid)
     except Exception as e:
-        logging.error(f"Error occurred: {e}")
+        logger.error(f"Error occurred: {e}")
 
 
 def create_tasks(args):
@@ -75,6 +76,7 @@ def main():
         epilog="Designed on 02/22/2023 by Xiao dong Li"
     )
     parser.add_argument('--version', action='version', version='%(prog)s 0.0.7')
+    parser.add_argument("--log", type=str, default='hastat.log', help="The log file (default: %(default)s)")
     parser.add_argument("--gen", required=True, type=str, help="A genotype file with VCF format")
     parser.add_argument("--ann", required=True, type=str, help="A gene annotation file with GFF format")
     parser.add_argument("--phe", required=True, type=str,
@@ -90,6 +92,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Set up logging
+    handler = logging.FileHandler(args.log_file)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
     out_dir = os.path.join(args.dir, time.strftime("%Y%m%d", time.localtime()))
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -98,17 +106,18 @@ def main():
     TASKS = create_tasks(args)
 
     # Start the timer and running the tasks
-    start = time.time()
     NUMBER_OF_PROCESSES = args.process
-    logging.info('Creating pool with {} processes\n'.format(NUMBER_OF_PROCESSES))
+    logger.info('Creating pool with {} processes\n'.format(NUMBER_OF_PROCESSES))
+
+    start = time.time()
     # Create Pool
     with Pool(NUMBER_OF_PROCESSES) as pool:
         results = [pool.apply_async(worker, task) for task in TASKS]
         for r in results:
-            logging.info(r.get())
+            logger.info(r.get())
     end = time.time()
 
-    logging.info("All subprocesses done within {:.2f} seconds.".format(end - start))
+    logger.info("All subprocesses done within {:.2f} seconds.".format(end - start))
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ from collections import defaultdict
 import pandas as pd
 from statsmodels.stats.oneway import anova_oneway
 from statsmodels.sandbox.stats.multicomp import MultiComparison
+from hastat.hastat import logger
 
 
 class HapAnovaTest(object):
@@ -48,8 +49,8 @@ class HapAnovaTest(object):
                 multi_comp_df = pd.DataFrame(data=multi_comp_tbl.data[1:], columns=midx)
                 self._stat_anova['comparisons'].append(multi_comp_df)
             else:
-                print("Warning: 2 or more groups required for oneway anova!")
-                print("\tFailed to perform multiple comparisons for phenotype {}".format(phe))
+                logger.warning("Warning: two or more groups required for oneway anova!")
+                logger.warning("\tFailed to perform multiple comparisons for phenotype {}".format(phe))
                 self._stat_anova['pvalue'].append("")
 
     def get_basic_data(self):
