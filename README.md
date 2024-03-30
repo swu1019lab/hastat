@@ -22,7 +22,9 @@ An easy library to perform gene haplotypes analysis in Python.
 ### Installation
 
 ```bash
-pip install hastat
+git clone https://github.com/swu1019lab/hastat.git
+cd hastat
+python setup.py install --user
 ```
 
 ### Usage
