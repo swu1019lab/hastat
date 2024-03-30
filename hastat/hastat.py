@@ -44,7 +44,7 @@ def worker(args, out_dir, gid):
             stat.to_excel(file_path=os.path.join(out_dir, '{}.haplotypes.stats.xlsx'.format(gid)))
 
         end = time.time()
-        return "{} runs {:.2f} seconds for {}\n".format(current_process().name, (end - start), gid)
+        logger.info("{} runs {:.2f} seconds for {}\n".format(current_process().name, (end - start), gid))
     except Exception as e:
         logger.error(f"Error occurred: {e}")
 
@@ -112,9 +112,7 @@ def main():
     start = time.time()
     # Create Pool
     with Pool(NUMBER_OF_PROCESSES) as pool:
-        results = [pool.apply_async(worker, task) for task in TASKS]
-        for r in results:
-            logger.info(r.get())
+        pool.starmap(worker, TASKS)
     end = time.time()
 
     logger.info("All subprocesses done within {:.2f} seconds.".format(end - start))
