@@ -28,6 +28,6 @@ pip install hastat
 ### Usage
 
 ```bash
-hastat --ann <annotation_file> --gen <vcf_file> --phe <phenotype_file> --out-dir <output_dir>
+hastat --ann <gff_file> --gen <vcf_file> --phe <phenotype_file> --out-dir <output_dir> genes.list
 ```
 
