@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hastat"
-version = "0.0.1"
+version = "0.0.2"
 authors = [{ name = "Xiaodong Li", email = "lxd1997xy@163.com" }]
 description = "A library for statistical analysis of genotype data"
 readme = "README.md"

@@ -10,16 +10,16 @@ from statsmodels.stats.oneway import anova_oneway
 from statsmodels.sandbox.stats.multicomp import MultiComparison
 
 
-class StatData(object):
+class HapAnovaTest(object):
     """
     a class for oneway anova and multi-comparison
     """
 
     def __init__(self, pheno, groups):
-        """_summary_
+        """ Initialize the class with phenotype and haplotype groups
 
         Args:
-            pheno (DataFrame): a two-columns at least DataFrame contained "samples" and "other traits"
+            pheno (DataFrame): a two-columns at least DataFrame contained "samples" and other traits name
             groups (DataFrame): a two-columns DataFrame contained "samples" and "haplotypes"
         """
         self.phap_data = pheno.merge(groups, how='inner', on='samples')
