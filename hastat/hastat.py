@@ -96,7 +96,7 @@ def main():
     args = parser.parse_args()
 
     # Set up logging
-    handler = logging.FileHandler(args.log)
+    handler = logging.FileHandler(args.log, mode='w')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
