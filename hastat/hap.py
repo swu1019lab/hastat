@@ -5,6 +5,7 @@
 # @File    : hap.py
 
 import pandas as pd
+from hastat.hastat import logger
 
 
 class HapData(object):
@@ -13,11 +14,12 @@ class HapData(object):
     """
     def __init__(self, geno_dataframe) -> None:
         """
+        Initialize the HapData object
 
         :param geno_dataframe: a dataframe contained genotype data
         """
         nrow, ncol = geno_dataframe.shape
-        print("The number of output samples and loci:", ncol, nrow)
+        logger.info("The number of output samples and loci: {} {}".format(ncol, nrow))
         # Seek haplotype of gene
         # access haplotypes and sequence
         hap_grouped = geno_dataframe.T.assign(size=1).groupby(geno_dataframe.index.to_list(), as_index=False)
@@ -58,7 +60,7 @@ class HapData(object):
                 ['haplotypes', 'groups']).count().unstack(fill_value=0)
             return hap_table0.loc[:, 'samples'].T
         else:
-            print("Not found sample groups!")
+            logger.warning("Not found sample groups!")
 
     def get_snps_data(self):
         """
@@ -76,7 +78,7 @@ class HapData(object):
         :return: a list containing samples from target haplotype
         """
         if hap is not None:
-            print("Getting the samples belong to {} from haplotypes groups".format(hap))
+            logger.info("Getting the samples belong to {} from haplotypes groups".format(hap))
             return self.hap_ngroup.query('haplotypes == @hap').samples.to_list()
 
     def get_hap_nlargest(self, n=3, keep='first'):

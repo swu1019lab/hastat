@@ -5,6 +5,7 @@
 # @File    : gene.py
 
 import numpy as np
+from hastat.hastat import logger
 
 
 class GeneData(object):
@@ -52,7 +53,7 @@ class GeneData(object):
         return list(self.gff_in.featuretypes())
 
     def get_feature_data(self, feature_type='CDS'):
-        print("Retrieving {} data of {} from FeatureDB".format(feature_type, self.id))
+        logger.info("Retrieving {} data of {} from FeatureDB".format(feature_type, self.id))
         return np.array([[f.start, f.end] for f in self.gff_in.region(
             seqid=self.chrom_name,
             start=self.chrom_start,

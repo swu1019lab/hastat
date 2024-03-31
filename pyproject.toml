@@ -4,19 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hastat"
-version = "0.0.2"
+version = "0.0.3"
 authors = [{ name = "Xiaodong Li", email = "lxd1997xy@163.com" }]
-description = "A library for statistical analysis of genotype data"
+description = "A library for gene haplotypes analysis and statistics."
 readme = "README.md"
-keywords = ["genotype", "haplotypes", "statistics", "analysis"]
+keywords = ["gene", "genotype", "haplotypes", "statistics", "analysis"]
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
 classifiers = [
-    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License",
     "Natural Language :: English",
-    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.9",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
@@ -29,7 +28,11 @@ dependencies = [
     'gffutils>=0.10.1',
     'pysam>=0.17.0',
 ]
+dynamic = ['entry-points']
 
 [project.urls]
 Homepage = "https://github.com/swu1019lab/hastat"
 issues = "https://github.com/swu1019lab/hastat/issues"
+
+[project.scripts]
+hastat = "hastat.hastat:main"

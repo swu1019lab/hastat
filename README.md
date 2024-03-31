@@ -24,6 +24,12 @@ An easy library to perform gene haplotypes analysis in Python.
 ```bash
 git clone https://github.com/swu1019lab/hastat.git
 cd hastat
+# install the package using build and pip commands
+pip install build --user
+python -m build
+pip install dist/hastat-0.0.3.tar.gz --user
+# or
+# install the package using setup.py install command
 python setup.py install --user
 ```
 

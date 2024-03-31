@@ -10,25 +10,25 @@ import argparse
 import time
 import logging
 from multiprocessing import Pool, freeze_support, current_process
-from .dataset import DataSet
-from .stat import HapAnovaTest
 
 # Set up logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def worker(args, out_dir, gid):
+def worker(args, gid):
     """
     This function performs the main task of the script. It loads the data, retrieves the genotype of the gene,
     gets the haplotypes data of the gene, and performs statistical analysis on the haplotypes.
 
     :param args: An argparse.Namespace object containing the command-line arguments.
-    :param out_dir: The directory where the output files will be saved.
     :param gid: The id of the gene to be analyzed.
     :return: A string indicating the process name, the time taken, and the gene id.
     """
     try:
+        from .dataset import DataSet
+        from .stat import HapAnovaTest
+
         start = time.time()
         # Load data firstly
         db = DataSet(args.gen, args.ann, args.phe)
@@ -39,9 +39,9 @@ def worker(args, out_dir, gid):
         else:
             # Get haplotypes data of gene
             hap = geno.get_hap_data()
-            hap.to_excel(file_path=os.path.join(out_dir, '{}.haplotypes.data.xlsx'.format(gid)))
+            hap.to_excel(file_path=os.path.join(args.dir, '{}.haplotypes.data.xlsx'.format(gid)))
             stat = HapAnovaTest(db.phe_in, hap.get_hap_ngroup())
-            stat.to_excel(file_path=os.path.join(out_dir, '{}.haplotypes.stats.xlsx'.format(gid)))
+            stat.to_excel(file_path=os.path.join(args.dir, '{}.haplotypes.stats.xlsx'.format(gid)))
 
         end = time.time()
         logger.info("{} runs {:.2f} seconds for {}\n".format(current_process().name, (end - start), gid))
@@ -60,7 +60,7 @@ def create_tasks(args):
     with open(args.infile, 'rt') as fn:
         for line in fn:
             if line.strip("\n"):
-                TASKS.append((args, args.dir, line.strip("\n").split("\t")[0]))
+                TASKS.append((args, line.strip("\n").split("\t")[0]))
     return TASKS
 
 
@@ -81,26 +81,29 @@ def main():
     parser.add_argument("--ann", required=True, type=str, help="A gene annotation file with GFF format")
     parser.add_argument("--phe", required=True, type=str,
                         help="A phenotype file with CSV format (the first column is samples and others are phenotypes)")
-    parser.add_argument("--process", type=int, default=1, help="The number of processes to run (default: %(default)s)")
-    parser.add_argument("--hap-min-num", type=int, default=0, help="The minimum number of haplotypes for analysis")
-    parser.add_argument("--gene-up-stream", dest="up", type=int, default=1500, help="up stream length of gene")
-    parser.add_argument("--gene-down-stream", dest="down", type=int, default=0, help="down stream length of gene")
-    parser.add_argument('--out-dir', dest="dir", default='data',
+    parser.add_argument("--process", type=int, default=1,
+                        help="The number of processes to run (default: %(default)s)")
+    parser.add_argument("--hap-min-num", type=int, default=0,
+                        help="The minimum number of haplotypes for analysis (default: %(default)s)")
+    parser.add_argument("--gene-up-stream", dest="up", type=int, default=1500,
+                        help="up stream length of gene (default: %(default)s)")
+    parser.add_argument("--gene-down-stream", dest="down", type=int, default=0,
+                        help="down stream length of gene (default: %(default)s)")
+    parser.add_argument('--out-dir', dest="dir", default='hap_results',
                         help="The directory of output file. (default: %(default)s)")
-
-    parser.add_argument("infile", help="A text file containing gene id per line only")
+    parser.add_argument("infile", help="A gene list file with one gene id per line")
 
     args = parser.parse_args()
 
     # Set up logging
-    handler = logging.FileHandler(args.log_file)
+    handler = logging.FileHandler(args.log)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-    out_dir = os.path.join(args.dir, time.strftime("%Y%m%d", time.localtime()))
-    if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+    # Create output directory
+    if not os.path.exists(args.dir):
+        os.makedirs(args.dir)
 
     # Create tasks
     TASKS = create_tasks(args)
@@ -112,7 +115,10 @@ def main():
     start = time.time()
     # Create Pool
     with Pool(NUMBER_OF_PROCESSES) as pool:
-        pool.starmap(worker, TASKS)
+        try:
+            pool.starmap(worker, TASKS)
+        except Exception as e:
+            logger.error(f"Error occurred during multiprocessing: {e}")
     end = time.time()
 
     logger.info("All subprocesses done within {:.2f} seconds.".format(end - start))

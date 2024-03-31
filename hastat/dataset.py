@@ -55,7 +55,7 @@ class DataSet(object):
             logger.info("Loading the phenotype data...")
             # two columns at least, samples (fixed) and other traits name
             self.phe_in = pd.read_csv(phe_file)
-            logger.info("The number of input samples and traits from phenotype data:",
+            logger.info("The number of input samples and traits from phenotype data: %d, %d",
                         self.phe_in.shape[0], self.phe_in.shape[1] - 1)
             self.pheno_num = self.phe_in.shape[1] - 1
             self.pheno_name = self.phe_in.columns[1:]
@@ -122,7 +122,7 @@ class DataSet(object):
         :return: a numpy array contained feature loci
         """
         logger.info(
-            "Retrieving {} data of {}:{}-{} from database".format(feature_type, chrom_name, chrom_start, chrom_end))
+            "Retrieving {} data of {}:{}-{} from gff file".format(feature_type, chrom_name, chrom_start, chrom_end))
         return np.array([[f.start, f.end] for f in self.gff_in.region(
             seqid=chrom_name,
             start=chrom_start,

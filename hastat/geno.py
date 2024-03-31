@@ -18,6 +18,8 @@ class GenoData(object):
 
     def __init__(self, allele_data_set) -> None:
         """
+        Initialize the GenoData object
+
         :param allele_data_set: a dict contained genotype data
         """
         self.allele_data_set = allele_data_set
