@@ -1,10 +1,10 @@
 ## hastat
 
 ### Description
-An easy library to perform gene haplotypes analysis in Python.
+A python library to perform gene haplotypes analysis in natural populations. It can generate haplotypes from genotypes, calculate haplotype frequencies, linkage disequilibrium, Fst, and haplotype association with a phenotype using ANOVA. It also provides visualisation tools to display the analysis results, such as HapBox, HapBar, Gene, etc. The library is designed to be user-friendly and easy to use, and it can be easily integrated into existing pipelines for gene haplotypes analysis in natural populations.
 
 ### Features
-- [x] Generate haplotypes from genotypes
+- [x] Generate haplotypes from genotypes (VCF file)
 - [x] Calculate haplotype frequencies
 - [x] Calculate linkage disequilibrium and Fst
 - [x] Calculate haplotype association with a phenotype using ANOVA
