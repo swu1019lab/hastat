@@ -1,4 +1,5 @@
 ## hastat
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.11001623-blue)](https://doi.org/10.5281/zenodo.11183815)
 
 ### Description
 A python library to perform gene haplotypes analysis in natural populations. It can generate haplotypes from genotypes, calculate haplotype frequencies, linkage disequilibrium, Fst, and haplotype association with a phenotype using ANOVA. It also provides visualisation tools to display the analysis results, such as HapBox, HapBar, Gene, etc. The library is designed to be user-friendly and easy to use, and it can be easily integrated into existing pipelines for gene haplotypes analysis in natural populations.
@@ -40,3 +41,7 @@ python setup.py install --user
 hastat --ann <gff_file> --gen <vcf_file> --phe <phenotype_file> --out-dir <output_dir> genes.list
 ```
 
+### Citation
+If you use hastat in your research, please cite the following paper:
+
+Xiaodong Li. (2024). hastat: a python library to perform gene haplotypes analysis in natural populations. (hastat-v0.0.4). Zenodo. https://doi.org/10.5281/zenodo.11183815
