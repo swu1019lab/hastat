@@ -8,6 +8,7 @@ An easy library to perform gene haplotypes analysis in Python.
 - [x] Calculate haplotype frequencies
 - [x] Calculate linkage disequilibrium and Fst
 - [x] Calculate haplotype association with a phenotype using ANOVA
+- [x] Visualise analysis results using HapBox, HapBar, Gene, etc.
 
 ### Requirements
 - Python 3.9 or higher
