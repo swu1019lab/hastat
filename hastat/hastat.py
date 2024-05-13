@@ -40,9 +40,9 @@ def worker(args, gid):
             # Get haplotypes data of gene
             hap = geno.get_hap_data()
             hap.to_excel(file_path=os.path.join(args.dir, '{}.haplotypes.data.xlsx'.format(gid)))
-            stat = HapAnovaTest(db.phe_in, hap.get_hap_ngroup())
-            stat.to_excel(file_path=os.path.join(args.dir, '{}.haplotypes.stats.xlsx'.format(gid)))
-
+            stat = HapAnovaTest(db.phe_in, hap.get_hap_groups(), min_hap_size=args.min_hap_size, annotate=gid)
+            stat.export_data(csv_file=os.path.join(args.dir, '{}.haplotypes.stats.csv'.format(gid)))
+            logger.info("\t{} is done!!!\n".format(gid))
         end = time.time()
         logger.info("{} runs {:.2f} seconds for {}\n".format(current_process().name, (end - start), gid))
     except Exception as e:
@@ -75,7 +75,7 @@ def main():
         description='A package for gene haplotype analysis',
         epilog="Designed on 02/22/2023 by Xiao dong Li"
     )
-    parser.add_argument('--version', action='version', version='%(prog)s 0.0.7')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.0.4')
     parser.add_argument("--log", type=str, default='hastat.log', help="The log file (default: %(default)s)")
     parser.add_argument("--gen", required=True, type=str, help="A genotype file with VCF format")
     parser.add_argument("--ann", required=True, type=str, help="A gene annotation file with GFF format")
@@ -83,8 +83,8 @@ def main():
                         help="A phenotype file with CSV format (the first column is samples and others are phenotypes)")
     parser.add_argument("--process", type=int, default=1,
                         help="The number of processes to run (default: %(default)s)")
-    parser.add_argument("--hap-min-num", type=int, default=0,
-                        help="The minimum number of haplotypes for analysis (default: %(default)s)")
+    parser.add_argument("--min-hap-size", dest="min_hap_size", type=int, default=10,
+                        help="the minimum sample size for each haplotype, default is 10 (default: %(default)s)")
     parser.add_argument("--gene-up-stream", dest="up", type=int, default=1500,
                         help="up stream length of gene (default: %(default)s)")
     parser.add_argument("--gene-down-stream", dest="down", type=int, default=0,

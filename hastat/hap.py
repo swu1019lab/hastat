@@ -5,6 +5,7 @@
 # @File    : hap.py
 
 import pandas as pd
+import numpy as np
 from hastat.hastat import logger
 
 
@@ -12,40 +13,84 @@ class HapData(object):
     """
     A class for haplotype analysis
     """
-    def __init__(self, geno_dataframe) -> None:
+
+    def __init__(self, df: pd.DataFrame) -> None:
         """
         Initialize the HapData object
 
-        :param geno_dataframe: a dataframe contained genotype data
+        :param df: a dataframe contained genotype data. The format should be:
+            1. the columns are samples;
+            2. the rows are multi-indexed SNPs with chr, pos, ref and alt;
+            3. the values are genotypes with 0, 1 and 2
         """
-        nrow, ncol = geno_dataframe.shape
-        logger.info("The number of output samples and loci: {} {}".format(ncol, nrow))
-        # Seek haplotype of gene
-        # access haplotypes and sequence
-        hap_grouped = geno_dataframe.T.assign(size=1).groupby(geno_dataframe.index.to_list(), as_index=False)
+        # logger.info("Initializing the HapData object")
+        # # access gene haplotype data
+        # hap_grouped = df.T.assign(size=1).groupby(df.index.to_list(), as_index=False)
+        #
+        # # get haplotypes table, including name, genotype code and size
+        # hap_table = hap_grouped.sum().sort_values(by='size', ascending=False).reset_index()
+        # hap_table = hap_table.rename(index=lambda x: "Hap" + str(x + 1))
+        # hap_table.index.name = 'haplotypes'
+        #
+        # # get haplotypes group for each sample
+        # hap_dict = hap_table.reset_index().set_index('index')['haplotypes'].to_dict()
+        # hap_groups = hap_grouped.ngroup()
+        # hap_groups.name = 'haplotypes'
+        # hap_groups = hap_groups.map(hap_dict)
+        #
+        # # transform code number into code character
+        # # i: chr, pos, ref, alt
+        # hap_table = hap_table.drop(columns='index')
+        # print(hap_table.columns)
+        # for i, s in hap_table.iloc[:, :-1].items():
+        #     hap_table.loc[:, i] = s.map({0: i[2] + i[2], 1: i[2] + i[3], 2: i[3] + i[3]})
+        # hap_table.columns = hap_table.columns.droplevel(['ref', 'alt'])
+        # print(hap_table.columns)
+        #
+        # # access haplotypes group, number, counts, table and dataframe
+        # self.hap_groups = hap_groups.reset_index()
+        # self.hap_num = hap_grouped.ngroups
+        # self.hap_count = hap_groups.value_counts()
+        # self.hap_table = hap_table
+        # self.hap_dataframe = df.T.assign(haplotypes=hap_groups)
+        logger.info("Initializing the HapData object")
+
+        # get unique haplotypes and their counts
+        hap, counts = np.unique(df.T.values, axis=0, return_counts=True)
+        _, indices = np.unique(df.T.values, axis=0, return_inverse=True)
+
+        # Access haplotype data
+        # hap_grouped = df.T.assign(size=1).groupby(df.index.to_list(), as_index=False)
+
         # haplotypes table, including name, genotype code and size
-        # can be exported as fasta format
-        hap_table = hap_grouped.sum()
-        hap_table = hap_table.rename(index=lambda x: "Hap" + str(x + 1))
+        hap_table = pd.DataFrame(hap, columns=df.index)
+        hap_table['size'] = counts
+        hap_table.index = "Hap" + (hap_table.index + 1).astype(str)
         hap_table.index.name = 'haplotypes'
-        # haplotypes group
+
+        # haplotypes group for each sample
         # add haplotype labels, e.g. Hap1, Hap2, ..., HapN
-        hap_ngroup = hap_grouped.ngroup()
-        hap_ngroup.name = 'haplotypes'
-        hap_ngroup = hap_ngroup.apply(lambda x: "Hap" + str(x + 1))
+        hap_groups = pd.Series(indices, index=df.columns)
+        hap_groups = "Hap" + (hap_groups + 1).astype(str)
+        hap_groups.name = 'haplotypes'
+
         # code number should transform into code character
         # i: chr, pos, ref, alt
         for i, s in hap_table.iloc[:, :-1].items():
-            hap_table.loc[:, i] = s.map({0: i[2] + i[2], 1: i[2] + i[3], 2: i[3] + i[3]})
+            ref, alt = i[2], i[3]
+            hap_table.loc[:, i] = s.map({0: ref + ref, 1: ref + alt, 2: alt + alt})
         hap_table.columns = hap_table.columns.droplevel(['ref', 'alt'])
-        # access haplotypes group, number, counts, table and dataframe
-        self.hap_ngroup = hap_ngroup.reset_index()
-        self.hap_num = len(hap_grouped)
-        self.hap_count = hap_ngroup.value_counts()
-        self.hap_table = hap_table
-        self.hap_dataframe = geno_dataframe.T.assign(haplotypes=hap_ngroup)
 
-    def count_hap_of_groups(self, sample_groups=None):
+        # access haplotypes group, number, counts, table and dataframe
+        self.hap_groups = hap_groups.reset_index()
+        self.hap_num = len(hap)
+        self.hap_count = hap_groups.value_counts()
+        self.hap_table = hap_table
+        self.hap_dataframe = df.T.assign(haplotypes=hap_groups)
+        # Convert haplotypes to a categorical data type to save memory and improve performance
+        self.hap_dataframe['haplotypes'] = self.hap_dataframe['haplotypes'].astype('category')
+
+    def get_hap_freq(self, sample_groups=None):
         """
         Count haplotypes distribution within different samples source
         A sample group Dataframe with two columns only: samples and groups
@@ -56,11 +101,11 @@ class HapData(object):
         :param sample_groups: add additional sample groups for haplotypes distribution count
         """
         if sample_groups is not None:
-            hap_table0 = self.hap_ngroup.merge(sample_groups, how='inner', on='samples').groupby(
+            hap_table0 = self.hap_groups.merge(sample_groups, how='inner', on='samples').groupby(
                 ['haplotypes', 'groups']).count().unstack(fill_value=0)
             return hap_table0.loc[:, 'samples'].T
         else:
-            logger.warning("Not found sample groups!")
+            return self.hap_count
 
     def get_snps_data(self):
         """
@@ -79,7 +124,7 @@ class HapData(object):
         """
         if hap is not None:
             logger.info("Getting the samples belong to {} from haplotypes groups".format(hap))
-            return self.hap_ngroup.query('haplotypes == @hap').samples.to_list()
+            return self.hap_groups.query('haplotypes == @hap').samples.to_list()
 
     def get_hap_nlargest(self, n=3, keep='first'):
         """
@@ -91,13 +136,13 @@ class HapData(object):
         """
         return self.hap_count.nlargest(n=n, keep=keep).index.tolist()
 
-    def get_hap_ngroup(self):
+    def get_hap_groups(self):
         """
         Get all haplotypes and count
 
         :return: a dataframe with two columns, which can be used as p-value calculation
         """
-        return self.hap_ngroup
+        return self.hap_groups
 
     def get_hap_table(self, n=-1, sample_groups=None):
         """
@@ -106,7 +151,7 @@ class HapData(object):
         :return: a dataframe containing detailed haplotypes information, which can be converted to other format
         """
         if sample_groups is not None:
-            hap_table0 = self.hap_ngroup.merge(sample_groups, how='inner', on='samples').groupby(
+            hap_table0 = self.hap_groups.merge(sample_groups, how='inner', on='samples').groupby(
                 ['haplotypes', 'groups']).count().unstack(fill_value=0)
             self.hap_table = self.hap_table.merge(hap_table0, left_index=True, right_index=True)
         if n > 0:

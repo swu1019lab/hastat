@@ -27,7 +27,7 @@ cd hastat
 # install the package using build and pip commands
 pip install build --user
 python -m build
-pip install dist/hastat-0.0.3.tar.gz --user
+pip install dist/hastat-0.0.4.tar.gz --user
 # or
 # install the package using setup.py install command
 python setup.py install --user
