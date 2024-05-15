@@ -44,4 +44,4 @@ hastat --ann <gff_file> --gen <vcf_file> --phe <phenotype_file> --out-dir <outpu
 ### Citation
 If you use hastat in your research, please cite the following paper:
 
-Xiaodong Li. (2024). hastat: a python library to perform gene haplotypes analysis in natural populations. (hastat-v0.0.4). Zenodo. https://doi.org/10.5281/zenodo.11183815
+> Xiaodong Li, & Kun Lu. (2024). hastat: a python library to perform gene haplotypes analysis in natural populations (v0.0.4). Zenodo. https://doi.org/10.5281/zenodo.11183815
