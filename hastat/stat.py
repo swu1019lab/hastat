@@ -7,6 +7,7 @@
 from collections import defaultdict
 import pandas as pd
 from statsmodels.stats.oneway import anova_oneway
+from statsmodels.stats.weightstats import ttest_ind
 from statsmodels.sandbox.stats.multicomp import MultiComparison
 from hastat.hastat import logger
 
@@ -25,11 +26,7 @@ class HapAnovaTest(object):
             min_hap_size (int): the minimum sample size for each haplotype, default is 10
             annotate (str): the annotation of haplotypes, default is "gene"
         """
-        # # Filter haplotypes with size less than min_hap_size
-        # hap_count = groups['haplotypes'].value_counts()
-        # hap_count = hap_count[hap_count >= min_hap_size]
-        # groups = groups[groups['haplotypes'].isin(hap_count.index)]
-        # Filter haplotypes with size less than min_hap_size
+        # Filter haplotypes with size less than min_hap_size (only keep major haplotypes)
         groups = groups[groups['haplotypes'].map(groups['haplotypes'].value_counts() >= min_hap_size)]
         if groups.empty or groups['haplotypes'].nunique() < 2:
             raise ValueError(
@@ -47,12 +44,13 @@ class HapAnovaTest(object):
         for phe in self.phap_data.columns:
             self.perform_anova_and_comparisons(phe, annotate=annotate)
 
-    def perform_anova_and_comparisons(self, phe: str, annotate='gene'):
+    def perform_anova_and_comparisons(self, phe: str, annotate='gene', method='TukeyHSD'):
         """
-        Perform oneway anova and multiple comparisons for each phenotype
+        Perform oneway anova and multiple comparisons for each phenotype using statsmodels
 
         :param phe: phenotype name
         :param annotate: the annotation of haplotypes
+        :param method: the method for multiple comparisons, default is 'TukeyHSD', also can be AllPairTest
         :return: None
         """
         # filter haplotype with na value and std equals to zero
@@ -64,11 +62,13 @@ class HapAnovaTest(object):
             pass_phap_data = self.phap_data.loc[(slice(None), pass_hap), phe].dropna().reset_index()
             # oneway anova
             anova_res = anova_oneway(pass_phap_data.iloc[:, 2], groups=pass_phap_data.iloc[:, 1])
-            # self._stat_anova['pvalue'].append(anova_res.pvalue)
 
             # Tests for multiple comparisons
             multi_comp = MultiComparison(pass_phap_data.iloc[:, 2], groups=pass_phap_data.iloc[:, 1])
-            multi_comp_tbl = multi_comp.tukeyhsd(alpha=0.05).summary()
+            if method == 'AllPairTest':
+                multi_comp_tbl = multi_comp.allpairtest(ttest_ind, alpha=0.05, method="bonf")[0]
+            else:
+                multi_comp_tbl = multi_comp.tukeyhsd(alpha=0.05).summary()
             # index = pd.MultiIndex.from_product([[phe], multi_comp_tbl.data[0]])
             # Add the number of haplotypes and phenotype mean for each group, optional statistics like std, min, max
             pass_phap_count = self._stat_des.loc[:, (phe, 'count')].to_dict()
@@ -87,7 +87,6 @@ class HapAnovaTest(object):
             logger.warning(
                 f"Two or more groups required for one-way ANOVA! Failed to "
                 f"perform multiple comparisons for phenotype {phe}")
-            # self._stat_anova['pvalue'].append("")
 
     def get_basic_data(self):
         """
