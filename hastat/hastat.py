@@ -5,63 +5,10 @@
 # @File    : hastat.py
 
 
-import os
 import argparse
-import time
 import logging
-from multiprocessing import Pool, freeze_support, current_process
-
-# Set up logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-
-def worker(args, gid):
-    """
-    This function performs the main task of the script. It loads the data, retrieves the genotype of the gene,
-    gets the haplotypes data of the gene, and performs statistical analysis on the haplotypes.
-
-    :param args: An argparse.Namespace object containing the command-line arguments.
-    :param gid: The id of the gene to be analyzed.
-    :return: A string indicating the process name, the time taken, and the gene id.
-    """
-    try:
-        from .dataset import DataSet
-        from .stat import HapAnovaTest
-
-        start = time.time()
-        # Load data firstly
-        db = DataSet(args.gen, args.ann, args.phe)
-        # Get genotype object of gene
-        geno = db.get_gene_geno(gid, upstream=args.up, downstream=args.down)
-        if geno is None:
-            logger.warning("\tFailed to retrieve results of {}!!!\n".format(gid))
-        else:
-            # Get haplotypes data of gene
-            hap = geno.get_hap_data()
-            hap.to_excel(file_path=os.path.join(args.dir, '{}.haplotypes.data.xlsx'.format(gid)))
-            stat = HapAnovaTest(db.phe_in, hap.get_hap_groups(), min_hap_size=args.min_hap_size, annotate=gid)
-            stat.export_data(csv_file=os.path.join(args.dir, '{}.haplotypes.stats.csv'.format(gid)))
-            logger.info("\t{} is done!!!\n".format(gid))
-        end = time.time()
-        logger.info("{} runs {:.2f} seconds for {}\n".format(current_process().name, (end - start), gid))
-    except Exception as e:
-        logger.error(f"Error occurred: {e}")
-
-
-def create_tasks(args):
-    """
-    This function creates a list of tasks to be processed.
-
-    :param args: An argparse.Namespace object containing the command-line arguments.
-    :return: A list of tasks.
-    """
-    TASKS = []
-    with open(args.infile, 'rt') as fn:
-        for line in fn:
-            if line.strip("\n"):
-                TASKS.append((args, line.strip("\n").split("\t")[0]))
-    return TASKS
+from hastat.log.logger import logger
+from .func import view, stat, plot, gwas
 
 
 def main():
@@ -75,55 +22,72 @@ def main():
         description='A package for gene haplotype analysis',
         epilog="Designed on 02/22/2023 by Xiao dong Li"
     )
+
     parser.add_argument('--version', action='version', version='%(prog)s 0.0.4')
-    parser.add_argument("--log", type=str, default='hastat.log', help="The log file (default: %(default)s)")
-    parser.add_argument("--gen", required=True, type=str, help="A genotype file with VCF format")
-    parser.add_argument("--ann", required=True, type=str, help="A gene annotation file with GFF format")
-    parser.add_argument("--phe", required=True, type=str,
-                        help="A phenotype file with CSV format (the first column is samples and others are phenotypes)")
-    parser.add_argument("--process", type=int, default=1,
-                        help="The number of processes to run (default: %(default)s)")
-    parser.add_argument("--min-hap-size", dest="min_hap_size", type=int, default=10,
-                        help="the minimum sample size for each haplotype, default is 10 (default: %(default)s)")
-    parser.add_argument("--gene-up-stream", dest="up", type=int, default=1500,
-                        help="up stream length of gene (default: %(default)s)")
-    parser.add_argument("--gene-down-stream", dest="down", type=int, default=0,
-                        help="down stream length of gene (default: %(default)s)")
-    parser.add_argument('--out-dir', dest="dir", default='hap_results',
-                        help="The directory of output file. (default: %(default)s)")
-    parser.add_argument("infile", help="A gene list file with one gene id per line")
+    parser.add_argument("--log", type=str, help="The log file name (default: stdout)")
+    subparsers = parser.add_subparsers(title='subcommands', description='valid subcommands', help='additional help',
+                                       dest='command')
+    # Add subparsers for each command
+    # view command
+    parser_view = subparsers.add_parser('view', help='View the haplotypes data of a gene or target region')
+    exclusive_group = parser_view.add_mutually_exclusive_group(required=True)
+    parser_view.add_argument('-v', '--vcf', type=str, required=True, help='The VCF file containing the genotype data')
+    parser_view.add_argument('-a', '--gff', type=str, help='The GFF file containing the gene annotation')
+    exclusive_group.add_argument('-r', '--region', type=str,
+                                 help='The region of the gene to be analyzed, format: chr:start-end')
+    exclusive_group.add_argument('-i', '--gene_id', type=str,
+                                 help='The gene ID for the target region, which should be provided with the GFF file')
+    parser_view.add_argument('-t', '--type', type=str, choices=['genotype', 'hap_table', 'hap_group', 'hap_freq'],
+                             default='hap_group', help='The data type to be analyzed (default: %(default)s)')
+    parser_view.add_argument('-g', '--group', type=str,
+                             help='A csv file containing the custom groups of samples if the data type is hap_group')
+    parser_view.add_argument('-o', '--out', type=str, help='The output csv file name (default: stdout)')
+
+    # stat command
+    parser_stat = subparsers.add_parser('stat', help='Perform statistical analysis on the haplotypes of a gene')
+    parser_stat.add_argument('-g', '--group', type=str, required=True,
+                             help='A csv file containing the haplotype groups of samples')
+    parser_stat.add_argument('-p', '--pheno', type=str, required=True,
+                             help='A csv file containing the phenotype data of samples')
+    parser_stat.add_argument('-s', '--min_hap_size', type=int, default=10,
+                             help='The minimum sample size for each haplotype (default: %(default)s)')
+    parser_stat.add_argument('-a', '--annotate', type=str, default='gene',
+                             help='The annotation of haplotypes (default: %(default)s)')
+    parser_stat.add_argument('-m', '--method', type=str, choices=['TukeyHSD', 'AllPairTest'], default='TukeyHSD',
+                             help='The method for multiple comparisons (default: %(default)s)')
+    parser_stat.add_argument('-o', '--out', type=str, help='The output csv file name (default: stdout)')
+
+    # plot command
+    parser_plot = subparsers.add_parser('plot', help='Plot the haplotypes data of a gene')
+    parser_plot.add_argument('-t', '--type', type=str, choices=['bar', 'pie', 'box', 'network'], required=True,
+                             help='The plot type')
+    parser_plot.add_argument('-c', '--config', type=str, required=True, help='The configuration file for plotting')
+
+    # gwas command
+    parser_gwas = subparsers.add_parser('gwas', help='Perform GWAS analysis using GEMMA/EMAX wrapper')
+    parser_gwas.add_argument('-c', '--config', type=str, required=True, help='The configuration file for GWAS')
+
+    # prepare the function specified by the subcommand
+    parser_view.set_defaults(func=view.run)
+    parser_stat.set_defaults(func=stat.run)
+    parser_plot.set_defaults(func=plot.run)
+    parser_gwas.set_defaults(func=gwas.run)
 
     args = parser.parse_args()
 
     # Set up logging
-    handler = logging.FileHandler(args.log, mode='w')
+    if args.log:
+        handler = logging.FileHandler(args.log, mode='w')
+    else:
+        handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-    # Create output directory
-    if not os.path.exists(args.dir):
-        os.makedirs(args.dir)
-
-    # Create tasks
-    TASKS = create_tasks(args)
-
-    # Start the timer and running the tasks
-    NUMBER_OF_PROCESSES = args.process
-    logger.info('Creating pool with {} processes\n'.format(NUMBER_OF_PROCESSES))
-
-    start = time.time()
-    # Create Pool
-    with Pool(NUMBER_OF_PROCESSES) as pool:
-        try:
-            pool.starmap(worker, TASKS)
-        except Exception as e:
-            logger.error(f"Error occurred during multiprocessing: {e}")
-    end = time.time()
-
-    logger.info("All subprocesses done within {:.2f} seconds.".format(end - start))
+    # Call the function specified by the subcommand
+    if args.func:
+        args.func(args)
 
 
 if __name__ == '__main__':
-    freeze_support()
     main()

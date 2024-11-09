@@ -16,8 +16,7 @@ class HapAnovaTest(object):
     """
     a class for oneway anova and multi-comparison
     """
-
-    def __init__(self, pheno: pd.DataFrame, groups: pd.DataFrame, min_hap_size=10, annotate='gene'):
+    def __init__(self, pheno: pd.DataFrame, groups: pd.DataFrame, min_hap_size=10, annotate='gene', method='TukeyHSD'):
         """ Initialize the class with phenotype and haplotype groups
 
         Args:
@@ -25,6 +24,7 @@ class HapAnovaTest(object):
             groups (DataFrame): a two-columns DataFrame contained "samples" and "haplotypes"
             min_hap_size (int): the minimum sample size for each haplotype, default is 10
             annotate (str): the annotation of haplotypes, default is "gene"
+            method (str): the method for multiple comparisons, default is 'TukeyHSD', also can be AllPairTest
         """
         # Filter haplotypes with size less than min_hap_size (only keep major haplotypes)
         groups = groups[groups['haplotypes'].map(groups['haplotypes'].value_counts() >= min_hap_size)]
@@ -42,7 +42,7 @@ class HapAnovaTest(object):
 
         # Oneway anova and multiple comparisons results
         for phe in self.phap_data.columns:
-            self.perform_anova_and_comparisons(phe, annotate=annotate)
+            self.perform_anova_and_comparisons(phe, annotate=annotate, method=method)
 
     def perform_anova_and_comparisons(self, phe: str, annotate='gene', method='TukeyHSD'):
         """
@@ -88,32 +88,10 @@ class HapAnovaTest(object):
                 f"Two or more groups required for one-way ANOVA! Failed to "
                 f"perform multiple comparisons for phenotype {phe}")
 
-    def get_basic_data(self):
-        """
-        Get the basic statistics of haplotypes for each phenotype
-        :return: a DataFrame contained basic statistics
-        """
+    @property
+    def basic_data(self):
         return self._stat_des
 
-    def get_anova_data(self):
-        """
-        Get the results of oneway anova and multiple comparisons
-        :return: a dict contained p-value and comparisons
-        """
+    @property
+    def anova_data(self):
         return self._stat_anova
-
-    def export_data(self, csv_file='haplotypes.stats.simple.csv'):
-        """
-        Export statistics data into Excel file
-        :param csv_file: the output CSV file
-        :return: None
-        """
-        # with pd.ExcelWriter(excel_file) as writer:
-        #     self._stat_des.to_excel(writer, sheet_name='basic')
-        #     if len(self._stat_anova['pvalue']) > 0:
-        #         pd.DataFrame([self._stat_anova['pvalue']],
-        #                      columns=self.phap_data.columns).to_excel(writer, sheet_name='p-value')
-        #     if len(self._stat_anova['comparisons']) > 0:
-        #         pd.concat(self._stat_anova['comparisons'], axis=1).to_excel(writer, sheet_name='comparisons')
-        if len(self._stat_anova['comparisons']) > 0:
-            pd.concat(self._stat_anova['comparisons']).to_csv(csv_file, index=False)

@@ -1,0 +1,11 @@
+[data]
+vcf_file = "xxx.vcf.gz"
+phe_file = "xxx.txt" # phenotype file, plink required format
+out_name = "xxx" # output file name
+out_dir = "xxx" # output directory
+phe_num = 1 # number of phenotypes in the phenotype file
+
+
+[tool]
+plink = "plink" # plink path
+gemma = "gemma" # gemma path

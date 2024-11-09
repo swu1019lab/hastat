@@ -2,17 +2,18 @@
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.11001623-blue)](https://doi.org/10.5281/zenodo.11183815)
 
 ### Description
-A python library to perform gene haplotypes analysis in natural populations. It can generate haplotypes from genotypes, calculate haplotype frequencies, linkage disequilibrium, Fst, and haplotype association with a phenotype using ANOVA. It also provides visualisation tools to display the analysis results, such as HapBox, HapBar, Gene, etc. The library is designed to be user-friendly and easy to use, and it can be easily integrated into existing pipelines for gene haplotypes analysis in natural populations.
+A python library to perform gene haplotypes analysis in natural populations.
 
 ### Features
-- [x] Generate haplotypes from genotypes (VCF file)
-- [x] Calculate haplotype frequencies
-- [x] Calculate linkage disequilibrium and Fst
-- [x] Calculate haplotype association with a phenotype using ANOVA
-- [x] Visualise analysis results using HapBox, HapBar, Gene, etc.
+main modules:
+- [x] `view` view genotype, haplotype, pi, fst, ld data of interested genes in a VCF file
+- [x] `stat` perform haplotype statistic analysis with multiple phenotype using anova and multiple comparison
+- [x] `plot` plot haplotype data using HapBox, HapBar, HapPie, HapNetwork, Gene, etc.
+- [x] `gwas` perform gwas analysis using wrapper of gemma, plink, etc.
+
 
 ### Requirements
-- Python 3.9 or higher
+Python 3.9 or higher and the following packages are required:
 - pandas
 - numpy
 - scipy
@@ -20,28 +21,47 @@ A python library to perform gene haplotypes analysis in natural populations. It 
 - scikit-allel
 - gffutils
 - pysam
+- matplotlib
+- tomli
+- prettytable
 
 ### Installation
 
 ```bash
 git clone https://github.com/swu1019lab/hastat.git
 cd hastat
-# install the package using build and pip commands
+# install the package using build commands (recommended)
 pip install build --user
 python -m build
-pip install dist/hastat-0.0.4.tar.gz --user
+pip install dist/hastat-0.0.5.tar.gz --user
 # or
 # install the package using setup.py install command
 python setup.py install --user
 ```
 
 ### Usage
-
 ```bash
-hastat --ann <gff_file> --gen <vcf_file> --phe <phenotype_file> --out-dir <output_dir> genes.list
+usage: hastat [-h] [--version] [--log LOG] {view,stat,plot,gwas} ...
+
+A package for gene haplotype analysis
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --log LOG             The log file name (default: stdout)
+
+subcommands:
+  valid subcommands
+
+  {view,stat,plot,gwas}
+                        additional help
+    view                View the haplotypes data of a gene or target region
+    stat                Perform statistical analysis on the haplotypes of a gene
+    plot                Plot the haplotypes data of a gene
+    gwas                Perform GWAS analysis using GEMMA/EMAX wrapper
 ```
 
 ### Citation
 If you use hastat in your research, please cite the following paper:
 
-> Xiaodong Li, & Kun Lu. (2024). hastat: a python library to perform gene haplotypes analysis in natural populations (v0.0.4). Zenodo. https://doi.org/10.5281/zenodo.11183815
+> Xiaodong Li, & Kun Lu. (2024). hastat: a python library to perform gene haplotypes analysis in natural populations. Zenodo. https://doi.org/10.5281/zenodo.11183815

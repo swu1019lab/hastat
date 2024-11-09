@@ -1,0 +1,22 @@
+axes.prop_cycle: cycler('color', ['#498DCB', '#F9BEBF', '#747474', '#EE3424'])
+
+axes.spines.left:   True  # display axis spines
+axes.spines.bottom: True
+axes.spines.top:    False
+axes.spines.right:  False
+
+figure.figsize:     5.0, 4.0  # figure size in inches
+figure.dpi:         300       # figure dots per inch
+savefig.dpi :       300 # resolution of the output image
+savefig.format:    png         # {png, ps, pdf, svg}
+
+legend.loc :          'upper left'
+legend.frameon:       False     # if True, draw the legend on a background patch
+
+axes.grid : True
+axes.grid.axis : 'y'
+axes.grid.which : 'major'
+grid.linestyle : '--'
+grid.linewidth : 0.5
+grid.color : 'lightgrey'
+grid.alpha : 0.5
