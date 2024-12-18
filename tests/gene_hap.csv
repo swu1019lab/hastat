@@ -1,4 +1,4 @@
-chrom,C01,C01,C01,C01,haplotypes
+chrom,Chr01,Chr01,Chr01,Chr01,haplotypes
 pos,9481937,9482027,9483706,9484042,
 ref,T,A,A,C,
 alt,C,G,G,A,

@@ -253,14 +253,45 @@ hap_file = "gene_hap.csv"
 
 [plot]
 show_hap = ['Hap1', 'Hap2', 'Hap3', 'Hap4']
-name = 'BnaC01G0135600ZS'
-chrom = 'C01'
+name = 'gene1'
+chrom = 'Chr01'
 start = 9483087
 end = 9486387
 strand = '+'
 save_fig = 'hastat_gene.png'
 width = 8
 height = 8
+```
+
+`gene_ann.csv` file:
+```csv
+chrom,start,end,strand,name,type
+Chr01,9483087,9484131,+,gene1,exon
+Chr01,9483087,9484131,+,gene1,CDS
+Chr01,9484131,9484219,+,gene1,intron
+Chr01,9484219,9485730,+,gene1,exon
+Chr01,9484219,9485730,+,gene1,CDS
+Chr01,9485730,9485801,+,gene1,intron
+Chr01,9485801,9486387,+,gene1,exon
+Chr01,9485801,9486387,+,gene1,CDS
+```
+
+`gene_hap.csv` file:
+```csv
+chrom,Chr01,Chr01,Chr01,Chr01,haplotypes
+pos,9481937,9482027,9483706,9484042,
+ref,T,A,A,C,
+alt,C,G,G,A,
+samples,,,,,
+sample1,0,0,0,0,Hap1
+sample2,2,2,0,0,Hap2
+sample3,0,2,2,0,Hap3
+sample4,0,1,1,0,Hap4
+sample5,0,0,0,0,Hap1
+sample6,2,2,0,0,Hap2
+sample7,0,2,2,0,Hap3
+sample8,0,1,1,0,Hap4
+...
 ```
 
 ```bash
