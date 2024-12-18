@@ -194,7 +194,7 @@ calc_percentage = true # calculate the percentage of each haplotype
 ```bash
 hastat plot -t bar -c bar.toml
 ```
-<div style="display: flex; justify-content: center;">
+<div align="center">
   <img alt="hastat_bar.png" height="200px" src="tests/hastat_bar.png"/>
 </div>
 
@@ -216,7 +216,7 @@ calc_percentage = false # calculate the percentage of each haplotype
 ```bash
 hastat plot -t pie -c pie.toml
 ```
-<div style="display: flex; justify-content: center;">
+<div align="center">
   <img alt="hastat_pie.png" height="100px" src="tests/hastat_pie.png"/>
 </div>
 
@@ -240,7 +240,7 @@ height = 5
 ```bash
 hastat plot -t box -c box.toml
 ```
-<div style="display: flex; justify-content: center;">
+<div align="center">
   <img alt="hastat_box.png" height="200px" src="tests/hastat_box.png"/>
 </div>
 
@@ -266,7 +266,7 @@ height = 8
 ```bash
 hastat plot -t gene -c gene.toml
 ```
-<div style="display: flex; justify-content: center;">
+<div align="center">
   <img alt="hastat_gene.png" height="200px" src="tests/hastat_gene.png"/>
 </div>
 
