@@ -1,0 +1,14 @@
+[data]
+ann_file = "gene_ann.csv"
+hap_file = "gene_hap.csv"
+
+[plot]
+show_hap = ['Hap1', 'Hap2', 'Hap3', 'Hap4']
+name = 'BnaC01G0135600ZS'
+chrom = 'C01'
+start = 9483087
+end = 9486387
+strand = '+'
+save_fig = 'hastat_gene.png'
+width = 8
+height = 8

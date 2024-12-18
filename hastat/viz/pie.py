@@ -9,16 +9,24 @@ import pandas as pd
 import numpy as np
 import matplotlib as mpl
 from matplotlib import axes
+import matplotlib.pyplot as plt
 
 
 class HapPie(object):
-    def __init__(self):
+    def __init__(self, config: dict = None):
         """
         Initialize HapPie object
         """
-        self.hap_group = None
+        if config is None:
+            raise ValueError("config is None")
+        self.config = config
+        self.sample_hap = None
         self.sample_group = None
         self.data = None
+
+    def add_data(self, data: dict):
+        self.add_hap(pd.read_csv(data['sample_hap']))
+        self.add_group(pd.read_csv(data['sample_group']))
 
     def add_hap(self, df: pd.DataFrame, labels: list = None):
         """
@@ -35,9 +43,9 @@ class HapPie(object):
             raise ValueError("df is not a DataFrame")
         df.columns = ['sample', 'haplotypes']
         if labels is None:
-            self.hap_group = df
+            self.sample_hap = df
         else:
-            self.hap_group = df[df['haplotypes'].isin(labels)]
+            self.sample_hap = df[df['haplotypes'].isin(labels)]
 
     def add_group(self, df: pd.DataFrame):
         """
@@ -55,9 +63,9 @@ class HapPie(object):
         self.sample_group = df
 
     def merge_data(self):
-        if self.hap_group is None or self.sample_group is None:
+        if self.sample_hap is None or self.sample_group is None:
             raise ValueError("hap_data or group_data is None")
-        self.data = self.hap_group.merge(self.sample_group, how='inner', on='sample')
+        self.data = self.sample_hap.merge(self.sample_group, how='inner', on='sample')
 
     def get_plot_data(self, name: str, calc_percentage: bool = False):
         self.merge_data()
@@ -67,28 +75,28 @@ class HapPie(object):
             return data.div(data.sum())
         return data
 
-    def plot(self, ax: axes.Axes, name: str = None, colors: list = None, **kwargs):
+    def plot(self, ax: axes.Axes = None):
         """
         Plot pie chart for haplotype data
 
         :param ax: axes object
-        :param name: group name to be analyzed
-        :param colors: colors for each haplotype
-        :param kwargs: other parameters for pie chart
         :return:
         """
-        if name is None:
-            name = self.sample_group.columns[1]
-        data = self.get_plot_data(name, calc_percentage=False)
-        if colors is None:
-            colors = mpl.colormaps['Blues'](np.linspace(0.2, 0.7, len(data.index)))
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(self.config['plot']['width'], self.config['plot']['height']))
+
+        self.add_data(self.config['data'])
+
+        name = self.sample_group.columns[self.config['plot']['group_index']]
+        data = self.get_plot_data(name, calc_percentage=self.config['plot']['calc_percentage'])
+        colors = mpl.colormaps['Blues'](np.linspace(0.2, 0.7, len(data.index)))
         # plot pie chart for each column
         for i, col in enumerate(data.columns):
             ax.pie(data[col], labels=data.index, labeldistance=None,
                    colors=colors, center=(i * 1, 0.5), radius=0.4,
-                   wedgeprops={"linewidth": 1, "edgecolor": "white"},
-                   **kwargs)
+                   wedgeprops={"linewidth": 1, "edgecolor": "white"})
             ax.text(i * 1, 0.5 + 0.5, col, ha='center', va='bottom', fontsize=8, rotation=0)
             ax.text(i * 1, 0.5 - 0.5, f"{data[col].sum()}", ha='center', va='top', fontsize=8)
             ax.axis('equal')
         ax.legend(data.index, bbox_to_anchor=(1, 0, 0.5, 1), loc='center left', frameon=False)
+        plt.savefig(self.config['plot']['save_fig'], dpi=300, bbox_inches='tight')

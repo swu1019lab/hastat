@@ -59,8 +59,8 @@ def main():
 
     # plot command
     parser_plot = subparsers.add_parser('plot', help='Plot the haplotypes data of a gene')
-    parser_plot.add_argument('-t', '--type', type=str, choices=['bar', 'pie', 'box', 'network'], required=True,
-                             help='The plot type')
+    parser_plot.add_argument('-t', '--type', type=str, choices=['bar', 'pie', 'box', 'gene', 'network'],
+                             required=True, help='The plot type')
     parser_plot.add_argument('-c', '--config', type=str, required=True, help='The configuration file for plotting')
 
     # gwas command

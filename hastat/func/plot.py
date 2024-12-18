@@ -6,19 +6,19 @@
 
 import time
 import tomli
+from hastat.log.logger import logger
+from hastat.viz import bar, pie, box, network, gene
+from hastat.manage import Manager
 import matplotlib as mpl
 mpl.use('Agg')
 
-from hastat.log.logger import logger
-from hastat.viz import bar, pie, box, network
-
-
-viz_type = {
-    'bar': bar.HapBar,
-    'pie': pie.HapPie,
-    'box': box.HapBox,
-    'network': network.HapNetwork
-}
+# Initialize the manager and register plot types
+manager = Manager()
+manager.register('bar', bar.HapBar)
+manager.register('pie', pie.HapPie)
+manager.register('box', box.HapBox)
+manager.register('network', network.HapNetwork)
+manager.register('gene', gene.HapGene)
 
 
 def run(args):
@@ -28,9 +28,11 @@ def run(args):
     with open(args.config, 'rb') as f:
         config = tomli.load(f)
 
-    if viz_type.get(args.type) is None:
-        logger.error("The plot type {} is not supported!!!".format(args.type))
-    else:
-        viz_type[args.type](config).plot()
+    try:
+        plot_instance = manager.use(args.type, config)
+        plot_instance.plot()
+    except ValueError as e:
+        logger.error(e)
+
     end = time.time()
     logger.info("plot function runs {:.2f} seconds\n".format(end - start))

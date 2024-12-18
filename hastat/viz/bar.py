@@ -20,8 +20,8 @@ class HapBar(object):
         self.data = None
 
     def add_data(self, data: dict):
-        self.add_hap(pd.read_csv(data['sample_hap_csv'], header=True))
-        self.add_group(pd.read_csv(data['sample_group_csv'], header=True))
+        self.add_hap(pd.read_csv(data['sample_hap']))
+        self.add_group(pd.read_csv(data['sample_group']))
 
     def add_hap(self, df: pd.DataFrame, labels: list = None):
         """
@@ -71,7 +71,8 @@ class HapBar(object):
         return data
 
     def plot(self, ax: axes.Axes = None):
-        plt.style.use("hastat.conf.BarPlot")
+        # Set the color cycle
+        plt.rcParams['axes.prop_cycle'] = plt.cycler(color=self.config['plot']['color'])
 
         if ax is None:
             fig, ax = plt.subplots()
@@ -86,4 +87,19 @@ class HapBar(object):
         for i, (hap, row) in enumerate(data.iterrows()):
             ax.bar(x, row.to_numpy(), width=0.5, bottom=bottom, label=hap)
             bottom += row.to_numpy()
-        plt.savefig(self.config['plot']['name'])
+
+        # set the axes
+        ax.set_xlabel(self.config['plot']['x_label'])
+        ax.set_ylabel(self.config['plot']['y_label'])
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.yaxis.grid(
+            True,
+            linestyle='--',
+            which='major',
+            color='lightgrey',
+            alpha=.5
+        )
+        # Add legend
+        ax.legend(loc='lower left', frameon=False,  ncol=len(data.index), bbox_to_anchor=(0., 1.02, 1., .102))
+
+        plt.savefig(self.config['plot']['save_fig'])

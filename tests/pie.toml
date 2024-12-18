@@ -1,0 +1,10 @@
+[data]
+sample_hap = 'hap_groups.csv' # a csv file with the haplotype frequencies
+sample_group = 'sample_groups.csv' # a csv file with the sample group information
+
+[plot]
+group_index = 1 # 0-based index of the column in the sample group file that contains the group names
+save_fig = 'hastat_pie.png' # can be 'hastat_bar.png' or 'hastat_bar.pdf'
+width = 5 # set the width of the figure in inches
+height = 2 # set the height of the figure in inches
+calc_percentage = false

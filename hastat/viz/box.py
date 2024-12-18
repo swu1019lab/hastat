@@ -9,16 +9,25 @@ import numpy as np
 from itertools import cycle
 from matplotlib import axes
 from collections import Counter
+import matplotlib.pyplot as plt
 
 
 class HapBox(object):
-    def __init__(self):
-        self.hap_group = None
-        self.phe_data = None
+    def __init__(self, config: dict = None):
+        if config is None:
+            raise ValueError("config is None")
+        self.config = config
+
+        self.sample_hap = None
+        self.sample_phe = None
         self.comparisons = None
         self.sig_symbol = None
         self.step_size = None
         self.data = None
+
+    def add_data(self, data: dict):
+        self.add_hap(pd.read_csv(data['sample_hap']))
+        self.add_phe(pd.read_csv(data['sample_phe']))
 
     def add_hap(self, df: pd.DataFrame, labels: list = None):
         """
@@ -35,9 +44,9 @@ class HapBox(object):
             raise ValueError("df is not a DataFrame")
         df.columns = ['sample', 'haplotypes']
         if labels is None:
-            self.hap_group = df
+            self.sample_hap = df
         else:
-            self.hap_group = df[df['haplotypes'].isin(labels)]
+            self.sample_hap = df[df['haplotypes'].isin(labels)]
 
     def add_phe(self, df: pd.DataFrame, name: str or list = None):
         """
@@ -55,9 +64,9 @@ class HapBox(object):
 
         df.columns = ['sample'] + df.columns[1:].tolist()
         if name is None:
-            self.phe_data = df
+            self.sample_phe = df
         else:
-            self.phe_data = df.loc[:, ['sample'] + name]
+            self.sample_phe = df.loc[:, ['sample'] + name]
 
     def add_comparisons(self, comparisons: list):
         """
@@ -83,17 +92,18 @@ class HapBox(object):
         :param step_size: a list contained step size for each comparison.
         :return:
         """
-        if isinstance(step_size, int):
+        if not isinstance(step_size, list):
             self.step_size = [step_size] * len(self.comparisons)
         else:
             self.step_size = step_size
 
     def merge_data(self):
-        if self.hap_group is None or self.phe_data is None:
-            raise ValueError("hap_data or phe_data is None")
-        self.data = self.hap_group.merge(self.phe_data, how='inner', on='sample')
+        if self.sample_hap is None or self.sample_phe is None:
+            raise ValueError("hap_data or sample_phe is None")
+        self.data = self.sample_hap.merge(self.sample_phe, how='inner', on='sample')
 
     def get_plot_data(self, name: str):
+        self.merge_data()
         x0data = self.data['haplotypes'].to_numpy()
         y0data = self.data[name].to_numpy(dtype=float)
 
@@ -110,14 +120,18 @@ class HapBox(object):
             data[x].append(y)
         return xdata, ydata, data, labels
 
-    def plot(self, ax: axes.Axes, name: str):
+    def plot(self, ax: axes.Axes = None):
         if ax is None:
-            raise ValueError("ax is None")
-        if name is None:
-            raise ValueError("name is None")
+            fig, ax = plt.subplots(figsize=(self.config['plot']['width'], self.config['plot']['height']))
 
-        self.merge_data()
+        self.add_data(self.config['data'])
+        self.add_comparisons(self.config['plot']['comparisons'])
+        self.add_sig_symbol(self.config['plot']['sig_symbol'])
+        self.add_step_size(self.config['plot']['step_size'])
+
+        name = self.sample_phe.columns[self.config['plot']['group_index']]
         xdata, ydata, data, labels = self.get_plot_data(name)
+
         bp = ax.boxplot(list(data.values()),
                         labels=labels,
                         widths=0.5,
@@ -182,3 +196,4 @@ class HapBox(object):
             color='lightgrey',
             alpha=.5
         )
+        plt.savefig(self.config['plot']['save_fig'], dpi=300, bbox_inches='tight')
