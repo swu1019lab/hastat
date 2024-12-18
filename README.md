@@ -1,18 +1,36 @@
-## hastat
+![hastat](tests/hastat.png)
+
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.11001623-blue)](https://doi.org/10.5281/zenodo.11183815)
 
-### Description
+## Table of Contents
+- [hastat](#hastat)
+  - [Description](#-description)
+  - [Features](#-features)
+  - [Requirements](#-requirements)
+  - [Installation](#-installation)
+  - [Usage](#-usage)
+  - [Example](#-example)
+    - [1. view the genotype or haplotypes data of a gene](#-1-view-the-genotype-or-haplotypes-data-of-a-gene)
+    - [2. perform haplotype statistic analysis](#-2-perform-haplotype-statistic-analysis)
+    - [3. plot the haplotype data of a gene](#-3-plot-the-haplotype-data-of-a-gene)
+      - [bar plot](#-1%EF%B8%8F%E2%83%A3-bar-plot)
+      - [pie plot](#-2%EF%B8%8F%E2%83%A3-pie-plot)
+      - [box plot](#-3%EF%B8%8F%E2%83%A3-box-plot)
+      - [gene plot](#-4%EF%B8%8F%E2%83%A3-gene-plot)
+  - [Citation](#-citation)
+
+### ⭐ Description
 A python library to perform gene haplotypes analysis in natural populations.
 
-### Features
+### ⭐ Features
 main modules:
 - [x] `view` view genotype, haplotype, pi, fst, ld data of interested genes in a VCF file
 - [x] `stat` perform haplotype statistic analysis with multiple phenotype using anova and multiple comparison
-- [x] `plot` plot haplotype data using HapBox, HapBar, HapPie, HapNetwork, Gene, etc.
+- [x] `plot` plot haplotype data using HapBox, HapBar, HapPie, HapNetwork, HapGene, etc.
 - [x] `gwas` perform gwas analysis using wrapper of gemma, plink, etc.
 
 
-### Requirements
+### ⭐ Requirements
 Python 3.9 or higher and the following packages are required:
 - pandas
 - numpy
@@ -25,7 +43,7 @@ Python 3.9 or higher and the following packages are required:
 - tomli
 - prettytable
 
-### Installation
+### ⭐ Installation
 
 ```bash
 git clone https://github.com/swu1019lab/hastat.git
@@ -39,7 +57,7 @@ pip install dist/hastat-0.0.6.tar.gz --user
 python setup.py install --user
 ```
 
-### Usage
+### ⭐ Usage
 ```bash
 usage: hastat [-h] [--version] [--log LOG] {view,stat,plot,gwas} ...
 
@@ -61,7 +79,7 @@ subcommands:
     gwas                Perform GWAS analysis using GEMMA/EMAX wrapper
 ```
 
-### Example
+### ⭐ Example
 #### 🏷️ 1. view the genotype or haplotypes data of a gene
 ```bash
 hastat view -v test.vcf -i gene_id -t hap_group -o hap_groups.csv
@@ -96,7 +114,7 @@ optional arguments:
   -g GROUP, --group GROUP
                         A csv file containing the custom groups of samples if the data type is hap_group
   -o OUT, --out OUT     The output csv file name (default: stdout)
- ```
+```
 #### 🏷️ 2. perform haplotype statistic analysis
 ```bash
 hastat stat -g hap_groups.csv -p sample_phe.csv -o hap_stat.csv
@@ -155,12 +173,45 @@ optional arguments:
   -o OUT, --out OUT     The output csv file name (default: stdout)
 ```
 #### 🏷️ 3. plot the haplotype data of a gene
+##### 1️⃣ bar plot
+`bar.toml` file:
+```toml
+[data]
+sample_hap = 'hap_groups.csv' # a csv file with the haplotype frequencies
+sample_group = 'sample_groups.csv' # a csv file with the sample group information
+
+[plot]
+group_index = 1 # 0-based index of the column in the sample group file that contains the group names
+save_fig = 'hastat_bar.png' # can be 'hastat_bar.png' or 'hastat_bar.pdf'
+width = 10 # set the width of the figure in inches
+height = 5 # set the height of the figure in inches
+color = ['#498DCB', '#F9BEBF', '#747474', '#EE3424'] # color for the bars
+x_label = 'Haplotype'
+y_label = 'Haplotype frequency'
+calc_percentage = true # calculate the percentage of each haplotype
+```
+
 ```bash
 hastat plot -t bar -c bar.toml
 ```
 <div style="display: flex; justify-content: center;">
   <img alt="hastat_bar.png" height="200px" src="tests/hastat_bar.png"/>
 </div>
+
+##### ️2️⃣ pie plot
+`pie.toml` file:
+```toml
+[data]
+sample_hap = 'hap_groups.csv' # a csv file with the haplotype frequencies
+sample_group = 'sample_groups.csv' # a csv file with the sample group information
+
+[plot]
+group_index = 1 # 0-based index of the column in the sample group file that contains the group names
+save_fig = 'hastat_pie.png' # can be 'hastat_bar.png' or 'hastat_bar.pdf'
+width = 5 # set the width of the figure in inches
+height = 2 # set the height of the figure in inches
+calc_percentage = false # calculate the percentage of each haplotype
+```
 
 ```bash
 hastat plot -t pie -c pie.toml
@@ -169,6 +220,23 @@ hastat plot -t pie -c pie.toml
   <img alt="hastat_pie.png" height="100px" src="tests/hastat_pie.png"/>
 </div>
 
+##### ️3️⃣ box plot
+`box.toml` file:
+```toml
+[data]
+sample_hap = 'hap_groups.csv'
+sample_phe = 'sample_phe.csv'
+
+[plot]
+group_index = 1 # 0-based index of the column in the sample phenotype file that contains the trait names
+comparisons = [['Hap1', 'Hap2'], ['Hap1', 'Hap3'], ['Hap3', 'Hap4']]
+sig_symbol = ['*', '**', '***']
+step_size = [0.1, 1.5, 0.1]
+save_fig = 'hastat_box.png'
+width = 5
+height = 5
+```
+
 ```bash
 hastat plot -t box -c box.toml
 ```
@@ -176,9 +244,35 @@ hastat plot -t box -c box.toml
   <img alt="hastat_box.png" height="200px" src="tests/hastat_box.png"/>
 </div>
 
+##### ️4️⃣ gene plot
+`gene.toml` file:
+```toml
+[data]
+ann_file = "gene_ann.csv"
+hap_file = "gene_hap.csv"
+
+[plot]
+show_hap = ['Hap1', 'Hap2', 'Hap3', 'Hap4']
+name = 'BnaC01G0135600ZS'
+chrom = 'C01'
+start = 9483087
+end = 9486387
+strand = '+'
+save_fig = 'hastat_gene.png'
+width = 8
+height = 8
+```
+
+```bash
+hastat plot -t gene -c gene.toml
+```
+<div style="display: flex; justify-content: center;">
+  <img alt="hastat_gene.png" height="200px" src="tests/hastat_gene.png"/>
+</div>
+
 other options can be found by running `hastat plot -h`:
 ```bash
-usage: hastat plot [-h] -t {bar,pie,box,network} -c CONFIG
+usage: hastat plot [-h] -t {bar,pie,box,gene,network} -c CONFIG
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -187,17 +281,11 @@ optional arguments:
   -c CONFIG, --config CONFIG
                         The configuration file for plotting
 ```
-```bash
-hastat plot -t gene -c gene.toml
-```
-<div style="display: flex; justify-content: center;">
-  <img alt="hastat_gene.png" height="200px" src="tests/hastat_gene.png"/>
-</div>
 
 #### 🏷️ 4. perform GWAS analysis
 
 
-### Citation
-If you use hastat in your research, please cite the following paper:
+### ⭐ Citation
+If you use **hastat** in your research, please cite the following paper:
 
 > Xiaodong Li, & Kun Lu. (2024). hastat: a python library to perform gene haplotypes analysis in natural populations. Zenodo. https://doi.org/10.5281/zenodo.11183815
