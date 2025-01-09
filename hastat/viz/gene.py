@@ -196,6 +196,9 @@ class HapGene(object):
 
         center = self.center
         for i, (pos, ref, alt) in enumerate(self.feature_data['snp']):
+            if len(ref) > 1 or len(alt) > 1:
+                ref = "+" if len(ref) - len(alt) > 0 else "-"
+                alt = "+" if len(alt) - len(ref) > 0 else "-"
             ann1 = text.Annotation(ref, (float(new_pos[i]), self.y1 + offset), xycoords="data",
                                    va="center", ha="center", color='w',
                                    bbox=dict(boxstyle="round", fc='C0', ec="C0", alpha=alpha))
