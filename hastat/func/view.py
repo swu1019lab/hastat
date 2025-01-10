@@ -45,8 +45,7 @@ def run(args):
     elif args.type == 'hap_freq':
         groups = pd.read_csv(args.group, header=0, names=['samples', 'groups']) if args.group else None
         data = gv.calc_hap_freq(chrom, int(start), int(end), groups)
-        if isinstance(data, pd.Series):
-            data = data.reset_index().loc[:, ['samples', 'haplotypes']]
+        data.reset_index(inplace=True)
     elif args.type == 'pi':
         if not args.group:
             logger.error("The group file should be provided!!!")
