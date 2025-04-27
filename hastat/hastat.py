@@ -37,6 +37,10 @@ def main():
                                  help='The region of the gene to be analyzed, format: chr:start-end')
     exclusive_group.add_argument('-i', '--gene_id', type=str,
                                  help='The gene ID for the target region, which should be provided with the GFF file')
+    parser_view.add_argument('-u', '--upstream', type=int, default=0,
+                             help='The upstream distance of the gene (default: 0)')
+    parser_view.add_argument('-d', '--downstream', type=int, default=0,
+                             help='The downstream distance of the gene (default: 0)')
     parser_view.add_argument('-t', '--type', type=str, choices=['genotype', 'hap_table', 'hap_group', 'hap_freq'],
                              default='hap_group', help='The data type to be analyzed (default: %(default)s)')
     parser_view.add_argument('-g', '--group', type=str,
