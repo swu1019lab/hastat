@@ -80,16 +80,17 @@ class GeneVariant(object):
 
         # haplotypes table, including name, genotype code and size
         hap_table = pd.DataFrame(hap, columns=df.index)
-        hap_table['size'] = counts
+        # hap_table['size'] = counts
         hap_table.index = "Hap" + (hap_table.index + 1).astype(str)
-        hap_table.index.name = 'haplotypes'
+        # hap_table.index.name = 'haplotypes'
+        hap_table = hap_table.T.reset_index()
 
         # code number should transform into code character
         # i: chr, pos, ref, alt
-        for i, s in hap_table.iloc[:, :-1].items():
-            ref, alt = i[2], i[3]
-            hap_table.loc[:, i] = s.map({0: ref + ref, 1: ref + alt, 2: alt + alt})
-        hap_table.columns = hap_table.columns.droplevel(['ref', 'alt'])
+        # for i, s in hap_table.iloc[:, :-1].items():
+        #     ref, alt = i[2], i[3]
+        #     hap_table.loc[:, i] = s.map({0: ref + ref, 1: ref + alt, 2: alt + alt})
+        # hap_table.columns = hap_table.columns.droplevel(['ref', 'alt'])
         return hap_table
 
     def hap_groups(self, chrom_name, chrom_start, chrom_end):
