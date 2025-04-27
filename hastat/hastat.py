@@ -20,7 +20,7 @@ def main():
     """
     parser = argparse.ArgumentParser(
         description='A package for gene haplotype analysis',
-        epilog="Designed on 02/22/2023 by Xiao dong Li"
+        epilog="Designed on 02/22/2023 by Xiaodong Li"
     )
 
     parser.add_argument('--version', action='version', version='%(prog)s 0.0.4')
