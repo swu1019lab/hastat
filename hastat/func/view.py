@@ -29,7 +29,7 @@ def run(args):
         chrom, start, end = args.region.replace(' ', '').replace('-', ':').split(':')
     elif args.gene_id:
         gf = gene.GeneFeature(gff.read(args.gff))
-        chrom, start, end = gf.get_locus(args.gene_id)
+        chrom, start, end = gf.get_locus(args.gene_id, args.upstream, args.downstream)
     else:
         logger.error("The region or gene ID should be provided!!!")
         raise ValueError("The region or gene ID should be provided!!!")
@@ -39,7 +39,7 @@ def run(args):
         data = gv.get_geno_data(chrom, int(start), int(end))
     elif args.type == 'hap_table':
         data = gv.hap_table(chrom, int(start), int(end))
-        data.reset_index(inplace=True)
+        # data.reset_index(inplace=True)
     elif args.type == 'hap_group':
         data = gv.hap_groups(chrom, int(start), int(end))
     elif args.type == 'hap_freq':
