@@ -82,7 +82,7 @@ subcommands:
 ### ⭐ Example
 #### 🏷️ 1. view the genotype or haplotypes data of a gene
 ```bash
-hastat view -v test.vcf -i gene_id -t hap_group -o hap_groups.csv
+hastat view -v test.vcf -a test.gff -i gene_id -t hap_group -o hap_groups.csv
 ```
 the `hap_groups.csv` file will contain the haplotype data of the gene with the following format:
 ```csv
@@ -109,6 +109,10 @@ optional arguments:
                         The region of the gene to be analyzed, format: chr:start-end
   -i GENE_ID, --gene_id GENE_ID
                         The gene ID for the target region
+  -u UPSTREAM, --upstream UPSTREAM
+                        The upstream distance of the gene (default: 0)
+  -d DOWNSTREAM, --downstream DOWNSTREAM
+                        The downstream distance of the gene (default: 0)
   -t {genotype,hap_table,hap_group,hap_freq}, --type {genotype,hap_table,hap_group,hap_freq}
                         The data type to be analyzed (default: hap_group)
   -g GROUP, --group GROUP
