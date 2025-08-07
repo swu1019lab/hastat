@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='hastat',
-    version='0.0.6',
+    version='1.0.0',
     packages=find_packages(),
     url='https://github.com/swu1019lab/hastat',
     license='BSD License',

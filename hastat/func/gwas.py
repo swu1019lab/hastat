@@ -27,4 +27,4 @@ def run(args):
            phe_num=config['data']['phe_num'])
 
     end = time.time()
-    logger.info("gwas function runs {:.2f} seconds\n".format(end - start))
+    logger.info("gwas function runs {:.2f} seconds".format(end - start))

@@ -1,14 +1,38 @@
-[data]
-ann_file = "gene_ann.csv"
-hap_file = "gene_hap.csv"
+[default]
+bbox = [0.2, 0.2, 0.8, 0.6] # all artist objects will be plotted in the boundary box (relative to matplotlib axes)
+xy = [0, 0.4] # the anchor point to plot gene (relative to bbox)
+width = 1 # the width to plot gene, should be within [0, 1] (relative to bbox)
+height = 0.05 # the height to plot gene, should be within [0, 1] (relative to bbox)
+color = 'C0' # the color to plot feature
+feature = 'exon' # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
+gene_label_size = 10 # the fontsize of gene label
 
-[plot]
-show_hap = ['Hap1', 'Hap2', 'Hap3', 'Hap4']
-name = 'gene1'
-chrom = 'Chr01'
-start = 9483087
-end = 9486387
-strand = '+'
-save_fig = 'hastat_gene.png'
-width = 8
-height = 8
+ann_file = "" # the data of variant annotation, csv file, e.g., hap_ann.csv
+ann_y = 0.5 # the y value of annotation text (relative to bbox)
+ann_text_size = 8 # the fontsize of annotation text
+
+hap_file = "" # the data of gene haplotypes, csv file, e.g., hap_table.csv
+hap_y = 0 # the y value of haplotypes (relative to bbox)
+hap_height = 0.3 # the height of whole haplotypes plot (relative to bbox)
+hap_cols = [] # only show the haplotypes data of interested
+hap_label_show = true # Whether to display the haplotype labels
+hap_label_size = 8 # the fontsize of haplotype labels
+
+pi_file = "" # the pi data of target region, csv file, e.g., gene.pi.csv with chrom,start,end,n_bases,counts,pi,groups
+pi_y = 0.5 # the y value of pi plot (relative to bbox)
+pi_height = 0.15 # the height of pi plot (relative to bbox)
+pi_style = "line" # plot style: "line" or "fill" (fill_between)
+
+fst_file = "" # the fst data of target region, csv file, e.g., gene.fst.csv with chrom,start,end,counts,fst,groups
+fst_y = 0.75 # the y value of fst plot (relative to bbox)
+fst_height = 0.15 # the height of fst plot (relative to bbox)
+fst_style = "fill" # plot style: "line" or "fill" (fill_between)
+
+
+
+[BnaA02G0156900ZS]
+hap_file = "results/BnaA02G0156900ZS.FT1007.table.csv"
+pi_file = "results/BnaA02G0156900ZS.FT1007.pi.csv"
+fst_file = "results/BnaA02G0156900ZS.FT1007.fst.csv"
+
+

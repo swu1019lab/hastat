@@ -1,9 +1,0 @@
-chrom,start,end,strand,name,type
-Chr01,9483087,9484131,+,gene1,exon
-Chr01,9483087,9484131,+,gene1,CDS
-Chr01,9484131,9484219,+,gene1,intron
-Chr01,9484219,9485730,+,gene1,exon
-Chr01,9484219,9485730,+,gene1,CDS
-Chr01,9485730,9485801,+,gene1,intron
-Chr01,9485801,9486387,+,gene1,exon
-Chr01,9485801,9486387,+,gene1,CDS

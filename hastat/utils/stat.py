@@ -19,12 +19,11 @@ class HapAnovaTest(object):
     def __init__(self, pheno: pd.DataFrame, groups: pd.DataFrame, min_hap_size=10, annotate='gene', method='TukeyHSD'):
         """ Initialize the class with phenotype and haplotype groups
 
-        Args:
-            pheno (DataFrame): a two-columns at least DataFrame contained "samples" and other traits name
-            groups (DataFrame): a two-columns DataFrame contained "samples" and "haplotypes"
-            min_hap_size (int): the minimum sample size for each haplotype, default is 10
-            annotate (str): the annotation of haplotypes, default is "gene"
-            method (str): the method for multiple comparisons, default is 'TukeyHSD', also can be AllPairTest
+        :param pheno: a two-columns at least DataFrame contained "samples" and other traits name
+        :param groups: a two-columns DataFrame contained "samples" and "haplotypes"
+        :param min_hap_size: the minimum sample size for each haplotype, default is 10
+        :param annotate: the annotation of haplotypes, default is "gene"
+        :param method: the method for multiple comparisons, default is 'TukeyHSD', also can be AllPairTest
         """
         # Filter haplotypes with size less than min_hap_size (only keep major haplotypes)
         groups = groups[groups['haplotypes'].map(groups['haplotypes'].value_counts() >= min_hap_size)]
@@ -73,6 +72,7 @@ class HapAnovaTest(object):
             # Add the number of haplotypes and phenotype mean for each group, optional statistics like std, min, max
             pass_phap_count = self._stat_des.loc[:, (phe, 'count')].to_dict()
             pass_phap_mean = self._stat_des.loc[:, (phe, 'mean')].to_dict()
+            pass_phap_std = self._stat_des.loc[:, (phe, 'std')].to_dict()
             multi_comp_df = pd.DataFrame(data=multi_comp_tbl.data[1:], columns=multi_comp_tbl.data[0])
             multi_comp_df = multi_comp_df.assign(pheno=phe,
                                                  annotate=annotate,
@@ -80,7 +80,9 @@ class HapAnovaTest(object):
                                                  count1=lambda x: x['group1'].map(pass_phap_count),
                                                  count2=lambda x: x['group2'].map(pass_phap_count),
                                                  mean1=lambda x: x['group1'].map(pass_phap_mean),
-                                                 mean2=lambda x: x['group2'].map(pass_phap_mean))
+                                                 mean2=lambda x: x['group2'].map(pass_phap_mean),
+                                                 std1=lambda x: x['group1'].map(pass_phap_std),
+                                                 std2=lambda x: x['group2'].map(pass_phap_std))
 
             self._stat_anova['comparisons'].append(multi_comp_df)
         else:

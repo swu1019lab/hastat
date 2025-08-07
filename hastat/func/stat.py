@@ -28,4 +28,4 @@ def run(args):
             table.add_row(row)
         print(table)
     end = time.time()
-    logger.info("stat function runs {:.2f} seconds\n".format(end - start))
+    logger.info("stat function runs {:.2f} seconds".format(end - start))

@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import axes
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 
 class HapBar(object):
@@ -20,10 +21,10 @@ class HapBar(object):
         self.data = None
 
     def add_data(self, data: dict):
-        self.add_hap(pd.read_csv(data['sample_hap']))
+        self.add_hap(pd.read_csv(data['sample_hap']), self.config['plot']['haplotypes'])
         self.add_group(pd.read_csv(data['sample_group']))
 
-    def add_hap(self, df: pd.DataFrame, labels: list = None):
+    def add_hap(self, df: pd.DataFrame, haplotypes: list = None):
         """
         Add a dataframe contained haplotype data
 
@@ -37,10 +38,10 @@ class HapBar(object):
         if not isinstance(df, pd.DataFrame):
             raise ValueError("df is not a DataFrame")
         df.columns = ['sample', 'haplotypes']
-        if labels is None:
+        if haplotypes is None or len(haplotypes) == 0:
             self.sample_hap = df
         else:
-            self.sample_hap = df[df['haplotypes'].isin(labels)]
+            self.sample_hap = df[df['haplotypes'].isin(haplotypes)]
 
     def add_group(self, df: pd.DataFrame):
         """
@@ -71,11 +72,8 @@ class HapBar(object):
         return data
 
     def plot(self, ax: axes.Axes = None):
-        # Set the color cycle
-        plt.rcParams['axes.prop_cycle'] = plt.cycler(color=self.config['plot']['color'])
-
         if ax is None:
-            fig, ax = plt.subplots()
+            fig, ax = plt.subplots(figsize=(self.config['plot']['width'], self.config['plot']['height']))
 
         self.add_data(self.config['data'])
 
@@ -83,9 +81,10 @@ class HapBar(object):
         data = self.get_plot_data(name, calc_percentage=self.config['plot']['calc_percentage'])
         bottom = np.zeros(data.shape[1])
         x = data.columns.get_level_values(name).to_numpy()
-
+        bar_cmap = LinearSegmentedColormap.from_list('bar_cmap', ['#C5504B', '#114F8B', '#FCE988', '#90CAEE'], N=100)
+        bar_colors = bar_cmap(np.linspace(0, 1, len(data.index)))
         for i, (hap, row) in enumerate(data.iterrows()):
-            ax.bar(x, row.to_numpy(), width=0.5, bottom=bottom, label=hap)
+            ax.bar(x, row.to_numpy(), width=0.5, bottom=bottom, label=hap, color=bar_colors[i])
             bottom += row.to_numpy()
 
         # set the axes
@@ -102,4 +101,4 @@ class HapBar(object):
         # Add legend
         ax.legend(loc='lower left', frameon=False,  ncol=len(data.index), bbox_to_anchor=(0., 1.02, 1., .102))
 
-        plt.savefig(self.config['plot']['save_fig'])
+        plt.savefig(self.config['plot']['save_fig'], dpi=300, bbox_inches='tight')
