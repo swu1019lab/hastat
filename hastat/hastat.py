@@ -190,6 +190,10 @@ def main():
                            help='Random seed for reproducible layouts (default: %(default)s)')
     parser_network.add_argument('--title', type=str, default='Haplotype Network',
                            help='Plot title (default: %(default)s)')
+    parser_network.add_argument('--legend_label_spacing', type=float, default=2,
+                           help='The vertical space between the legend entries, in font-size units. (default: %(default)s)')
+    parser_network.add_argument('--legend_handle_text_pad', type=float, default=1,
+                           help='The pad between the legend handle and text, in font-size units. (default: %(default)s)')
 
     # gene plot subcommand
     parser_gene = plot_subparsers.add_parser('gene', help='Create gene structure plot with haplotype information')

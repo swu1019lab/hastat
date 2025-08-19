@@ -126,7 +126,9 @@ def run(args):
                 'edge_alpha': getattr(args, 'edge_alpha', 0.6),
                 'edge_style': getattr(args, 'edge_style', 'line'),
                 'seed': getattr(args, 'seed', None),
-                'title': getattr(args, 'title', 'Haplotype Network')
+                'title': getattr(args, 'title', 'Haplotype Network'),
+                'legend_label_spacing': getattr(args, 'legend_label_spacing', 2),
+                'legend_handle_text_pad': getattr(args, 'legend_handle_text_pad', 1),
             }
         }
     else:

@@ -10,63 +10,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import networkx as nx
 from matplotlib import path
-from matplotlib.offsetbox import AnchoredOffsetbox, DrawingArea
-from matplotlib.lines import Line2D
-from matplotlib.text import Text
-import matplotlib as mpl
 import colorsys
-from abc import ABC
 from hastat.log.logger import logger
-
-
-class AnchoredSizeLegend(AnchoredOffsetbox, ABC):
-    def __init__(self,
-                 size,
-                 label,
-                 label_size=10,
-                 *args,
-                 **kwargs):
-        """
-        Draw a size legend with given size in points.
-
-        Parameters
-        ----------
-        :param size: a list of marker diameters in points (NOT area like scatter's 's' parameter)
-        :param label: a list of label
-        :param label_size: font size of label
-        :param args: other args of AnchoredOffsetbox
-        :param kwargs: other kwargs of AnchoredOffsetbox
-        
-        Note
-        ----
-        The size parameter should be in diameter units (points), which is different from
-        matplotlib's scatter() function that uses area units (points²).
-        """
-        if isinstance(size, int):
-            size = [size]
-
-        if isinstance(label, str):
-            label = [label]
-
-        self.box = DrawingArea(np.max(size) * 2.2, np.max(size) * 1.2, 0, 0)
-
-        for i in range(len(size)):
-            x, y = np.max(size) / 2, size[i] / 2
-            self.box.add_artist(
-                Line2D([x], [y], marker='o', color='w',
-                       markerfacecolor='none',
-                       markeredgecolor='k',
-                       markersize=size[i])
-            )
-            self.box.add_artist(
-                Line2D([x, x + size[i]], [size[i], size[i]], color="k", linewidth=1)
-            )
-            self.box.add_artist(
-                Text(x + size[i], size[i],
-                     label[i], size=label_size,
-                     color='k', ha="left", va="center")
-            )
-        super().__init__(*args, child=self.box, **kwargs)
 
 
 class FancyNetwork(object):
@@ -248,12 +193,6 @@ class FancyNetwork(object):
         :param scale_factor: scaling factor for node sizes
         :param node_alpha: transparency for node colors
         """
-        if not composition or size == 0:
-            # Draw empty circle for haplotypes with no samples
-            ax.scatter(*pos, s=50 * scale_factor, c='lightgray', 
-                      alpha=node_alpha * 0.5, zorder=2, edgecolors='white', linewidth=0.5)
-            return
-
         # Calculate node size based on sample count
         node_size = np.sqrt(size) * scale_factor 
 
@@ -265,7 +204,7 @@ class FancyNetwork(object):
         if len(groups) == 1:
             # Single group - draw solid circle
             ax.scatter(*pos, s=node_size, c=[colors[0]], alpha=node_alpha, 
-                      zorder=2, edgecolors='white', linewidth=0.5)
+                zorder=2, edgecolors='white', linewidth=0)
         else:
             # Multiple groups - draw pie chart using scatter with path markers
             # Calculate cumulative percentages
@@ -404,27 +343,20 @@ class FancyNetwork(object):
             nx.draw_networkx_edges(self.network, pos, edge_color=edge_color, 
                                  width=edge_width, alpha=edge_alpha, ax=ax)
         
-        # Calculate node size scaling
-        if self.node_sizes:
-            max_samples = max(self.node_sizes.values()) if self.node_sizes.values() else 1
-            min_samples = min(s for s in self.node_sizes.values() if s > 0) if any(s > 0 for s in self.node_sizes.values()) else 0            
-            scale_factor = plot_config.get('node_scale_factor', 1.0)
-        else:
-            scale_factor = 1.0
-            max_samples = 1
-            min_samples = 1
+        # plot node
+        scale_factor = plot_config.get('node_scale_factor', 1.0)
         
         # Get node alpha
         node_alpha = plot_config.get('node_alpha', 0.8)
         
-        # Draw nodes
+        # Draw nodes and collect scatter objects for legend
         for node in self.network.nodes():
             node_pos = pos[node]
             composition = self.hap_composition.get(node, {})
             size = self.node_sizes.get(node, 1)
             
             self._draw_pie_node(ax, node_pos, composition, size, 
-                              scale_factor=scale_factor, node_alpha=node_alpha)
+                scale_factor=scale_factor, node_alpha=node_alpha)
         
         # Draw node labels if requested
         show_node_label = plot_config.get('show_node_label', False)
@@ -455,7 +387,14 @@ class FancyNetwork(object):
                                        font_size=edge_label_size, font_color=edge_label_color, ax=ax)
         
         # Create legends
-        self._create_legends(fig, ax, max_samples, min_samples)
+        x, y, node_size = [], [], []
+        for node in self.network.nodes():
+            node_pos = pos[node]
+            x.append(node_pos[0])
+            y.append(node_pos[1])
+            node_size.append(np.sqrt(self.node_sizes.get(node, 1)) * scale_factor)
+        scatter = ax.scatter(x, y, s=node_size, c='none', zorder=2, edgecolors='white', linewidth=0.5)
+        self._create_legends(ax, scatter)
         
         # Set axis properties
         ax.axis('off')
@@ -473,7 +412,7 @@ class FancyNetwork(object):
         # Don't call plt.show() in headless environment
         plt.close(fig)
     
-    def _create_legends(self, fig, ax, max_samples, min_samples):
+    def _create_legends(self, ax, scatter):
         """Create legends for groups and node sizes"""
         # Group color legend
         if self.group_colors:
@@ -481,81 +420,53 @@ class FancyNetwork(object):
             
             for group, color in self.group_colors.items():
                 legend_elements.append(patches.Patch(facecolor=color, edgecolor=color, label=str(group)))
+
+            logger.info(f"Group legend created with {len(legend_elements)} entries")
             
             # Add group legend with improved positioning
             group_legend = ax.legend(handles=legend_elements, 
                                    title='Population Groups',
-                                   loc='upper left', 
-                                   bbox_to_anchor=(1.02, 0.98),
+                                   loc='upper left',
                                    borderaxespad=0, 
                                    frameon=False)
+            
             plt.setp(group_legend.get_title(), fontweight='bold')
+            ax.add_artist(group_legend)
         
         # Node size legend
-        self._create_size_legend(ax)
+        self._create_size_legend(ax, scatter)
     
-    def _create_size_legend(self, ax):
-        """Create a proper size legend for nodes using AnchoredSizeLegend"""
-        # Collect all actual node sizes in the network
+    def _create_size_legend(self, ax, scatter):
+        """Create a size legend"""
         scale_factor = self.config['plot'].get('node_scale_factor', 1.0)
+        label_spacing = self.config['plot'].get('legend_label_spacing', 2)
+        handle_text_pad = self.config['plot'].get('legend_handle_text_pad', 1)
         
-        # Collect original sample counts and scaled node sizes
-        original_sizes = []
-        all_node_sizes = []
-        
-        for node in self.network.nodes():
-            size = self.node_sizes.get(node, 1)
-            original_sizes.append(size)
+        try:
+            # Generate legend
+            handles, labels = scatter.legend_elements(
+                prop="sizes", 
+                num=3,  # Show 3 different sizes
+                func=lambda s: np.round((s / scale_factor) ** 2),  # Convert area back to sample count
+                color='white',
+                markeredgecolor='gray',
+                markeredgewidth=0.5,
+            )
             
-            node_size = np.sqrt(size) * scale_factor
-            all_node_sizes.append(node_size)
-        
-        if not all_node_sizes:
-            logger.warning("No node sizes available for legend creation")
-            return
-        
-        # Log statistics
-        logger.info(f"Node size statistics:")
-        logger.info(f"  Scale factor: {scale_factor}")
-        logger.info(f"  Original sample counts - Min: {min(original_sizes)}, Max: {max(original_sizes)}, Mean: {np.mean(original_sizes):.2f}")
-        logger.info(f"  Scaled node sizes (area) - Min: {min(all_node_sizes):.0f}, Max: {max(all_node_sizes):.0f}, Mean: {np.mean(all_node_sizes):.0f}")
-        
-        # Use MaxNLocator to automatically select appropriate size values
-        loc = mpl.ticker.MaxNLocator(nbins=5)  # Show 3-4 size values
-        node_size_values = loc.tick_values(min(all_node_sizes), max(all_node_sizes))
-        node_size_values = node_size_values[node_size_values >= min(all_node_sizes)]
-        node_size_values = node_size_values[node_size_values <= max(all_node_sizes)]
-        
-        logger.info(f"  Selected legend sizes (area): {[f'{val:.0f}' for val in node_size_values]}")
-        
-        # Convert scatter area units to Line2D diameter units for legend
-        # scatter uses area (s = π * r²), Line2D uses diameter (2 * r)
-        # So: diameter = 2 * sqrt(area / π)
-        legend_marker_sizes = []
-        for area in node_size_values:
-            diameter = 2 * np.sqrt(area / np.pi)
-            legend_marker_sizes.append(diameter)
-        
-        logger.info(f"  Converted to diameter units: {[f'{val:.1f}' for val in legend_marker_sizes]}")
-        
-        # Convert node sizes back to sample counts for labels
-        sample_labels = []
-        for node_size in node_size_values:
-            sample_count = int(node_size / scale_factor) ** 2
-            sample_labels.append(f'{sample_count}')
-        
-        logger.info(f"  Legend labels (sample counts): {sample_labels}")
-        
-        # Create the anchored size legend with converted sizes
-        asl = AnchoredSizeLegend(
-            legend_marker_sizes,  # Use converted diameter sizes
-            sample_labels,
-            label_size=8,
-            loc='lower left',
-            bbox_to_anchor=(1.02, 0.3),
-            bbox_transform=ax.transAxes,
-            pad=0.1,
-            borderpad=0.5,
-            frameon=False
-        )
-        ax.add_artist(asl)
+            # Create the legend
+            ax.legend(
+                handles, 
+                labels, 
+                loc="upper right", 
+                title="Sizes",
+                title_fontproperties=dict(weight='bold'),
+                labelspacing=label_spacing, # font-size units
+                handletextpad=handle_text_pad, # font-size units
+                frameon=False,
+            )
+            
+            logger.info(f"Size legend created with {len(labels)} entries")
+            
+        except Exception as e:
+            logger.error(f"Failed to create size legend: {e}")
+            logger.warning("Falling back to simple size indication")

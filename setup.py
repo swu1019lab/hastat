@@ -19,7 +19,6 @@ setup(
     long_description_content_type='text/markdown',
     classifiers=[
         'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Python :: 3.9',
