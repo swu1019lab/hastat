@@ -74,7 +74,9 @@ class FancyNetwork(object):
         if self.sample_hap_data is None or self.sample_group_data is None:
             logger.warning("Sample haplotype or group data not provided. Using simple node visualization.")
             self.hap_composition = {}
-            self.node_sizes = {node: 1 for node in self.network.nodes()}
+            self.node_sizes = {node: 1 for node in self.network.nodes()} # default node size is 1
+            if self.sample_hap_data is not None:
+                self.node_sizes.update(self.sample_hap_data['haplotypes'].value_counts().to_dict())
             return
         
         # Get group index
@@ -201,7 +203,11 @@ class FancyNetwork(object):
         proportions = np.array([composition[group] for group in groups])
         colors = [self.group_colors.get(group, 'gray') for group in groups]
         
-        if len(groups) == 1:
+        if len(groups) == 0:
+            # No groups - draw solid circle
+            ax.scatter(*pos, s=node_size, c='C3', alpha=node_alpha, 
+                zorder=2, edgecolors='white', linewidth=0)
+        elif len(groups) == 1:
             # Single group - draw solid circle
             ax.scatter(*pos, s=node_size, c=[colors[0]], alpha=node_alpha, 
                 zorder=2, edgecolors='white', linewidth=0)

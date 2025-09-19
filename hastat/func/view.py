@@ -109,7 +109,7 @@ def run(args):
             logger.warning(f"The {args.type} data of target gene or region is empty!!!")
             return
         if args.out:
-            data.to_csv(args.out + '.' + args.type + '.csv', index=False)
+            data.to_csv(args.out + '.' + args.type + '.csv', index=True)
         else:
             print(data)
     elif args.type == 'table':
