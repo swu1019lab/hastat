@@ -588,8 +588,9 @@ class FancyGene(object):
             ].copy()
         
         if gene_pi.empty:
+            logger.warning(f"Empty pi data within {chrom}:{chrom_start}-{chrom_end}")
             return None
-        
+
         # Calculate genomic positions (center of each window)
         gene_pi['pos_bp'] = (gene_pi['start'] + gene_pi['end']) / 2
         
@@ -693,6 +694,7 @@ class FancyGene(object):
             ].copy()
         
         if gene_fst.empty:
+            logger.warning(f"Empty fst data within {chrom}:{chrom_start}-{chrom_end}")
             return None
         
         # Calculate genomic positions (center of each window)

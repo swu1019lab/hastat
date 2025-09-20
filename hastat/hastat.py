@@ -74,9 +74,9 @@ def main():
     # bar plot subcommand
     parser_bar = plot_subparsers.add_parser('bar', help='Create bar plot for haplotype distribution')
     parser_bar.add_argument('--sample_hap', type=str, required=True,
-                           help='CSV file with sample haplotype data (sample, haplotype)')
+                           help='CSV file with sample haplotype data (samples, haplotypes)')
     parser_bar.add_argument('--sample_group', type=str, required=True,
-                           help='CSV file with sample group data (sample, group1, group2, ...)')
+                           help='CSV file with sample group data (samples, group1, group2, ...)')
     parser_bar.add_argument('--group_index', type=int, default=1,
                            help='Index of group column to use (default: %(default)s)')
     parser_bar.add_argument('--calc_percentage', action='store_true',
@@ -97,9 +97,9 @@ def main():
     # pie plot subcommand  
     parser_pie = plot_subparsers.add_parser('pie', help='Create pie plot for haplotype distribution')
     parser_pie.add_argument('--sample_hap', type=str, required=True,
-                           help='CSV file with sample haplotype data (sample, haplotype)')
+                           help='CSV file with sample haplotype data (samples, haplotypes)')
     parser_pie.add_argument('--sample_group', type=str, required=True,
-                           help='CSV file with sample group data (sample, group1, group2, ...)')
+                           help='CSV file with sample group data (samples, group1, group2, ...)')
     parser_pie.add_argument('--group_index', type=int, default=1,
                            help='Index of group column to use (default: %(default)s)')
     parser_pie.add_argument('--calc_percentage', action='store_true',
@@ -116,9 +116,9 @@ def main():
     # box plot subcommand
     parser_box = plot_subparsers.add_parser('box', help='Create box plot for haplotype-phenotype analysis')
     parser_box.add_argument('--sample_hap', type=str, required=True,
-                           help='CSV file with sample haplotype data (sample, haplotype)')
+                           help='CSV file with sample haplotype data (samples, haplotypes)')
     parser_box.add_argument('--sample_phe', type=str, required=True,
-                           help='CSV file with sample phenotype data (sample, trait1, trait2, ...)')
+                           help='CSV file with sample phenotype data (samples, trait1, trait2, ...)')
     parser_box.add_argument('--phe_index', type=int, default=1,
                            help='Index of phenotype column to use (default: %(default)s)')
     parser_box.add_argument('--comparisons', type=str, nargs='+', action='append',
@@ -141,9 +141,9 @@ def main():
     parser_network.add_argument('--file', type=str, required=True,
                                help='The network file (output from network command)')
     parser_network.add_argument('--sample_hap', type=str,
-                               help='CSV file with sample haplotype data (sample, haplotype)')
+                               help='CSV file with sample haplotype data (samples, haplotypes)')
     parser_network.add_argument('--sample_group', type=str,
-                               help='CSV file with sample group data (sample, group1, group2, ...)')
+                               help='CSV file with sample group data (samples, group1, group2, ...)')
     parser_network.add_argument('--group_index', type=int, default=1,
                                help='Index of group column to use (default: %(default)s)')
     parser_network.add_argument('-o', '--output', type=str, required=True,
