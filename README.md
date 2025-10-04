@@ -3,27 +3,27 @@
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.11001623-blue)](https://doi.org/10.5281/zenodo.11183815)
 
 ## Table of Contents
-- [hastat](#hastat)
-  - [Description](#-description)
-  - [Features](#-features)
-  - [Requirements](#-requirements)
-  - [Installation](#-installation)
-  - [Usage](#-usage)
-  - [Examples](#-examples)
-    - [1. View gene haplotypes and genotype data](#-1-view-gene-haplotypes-and-genotype-data)
-    - [2. Perform haplotype statistical analysis](#-2-perform-haplotype-statistical-analysis)
-    - [3. Visualize haplotype data](#-3-visualize-haplotype-data)
-      - [Bar plot](#-1-bar-plot)
-      - [Pie plot](#-2-pie-plot)
-      - [Box plot](#-3-box-plot)
-      - [Network plot](#-4-network-plot)
-      - [Gene structure plot](#-5-gene-structure-plot)
-    - [4. Network analysis](#-4-network-analysis)
-    - [5. Multi-population analysis](#-5-multi-population-analysis)
-    - [6. Selection sweep analysis](#-6-selection-sweep-analysis)
-    - [7. GWAS analysis](#-7-gwas-analysis)
-  - [Advanced Usage](#-advanced-usage)
-  - [Citation](#-citation)
+- [Table of Contents](#table-of-contents)
+  - [⭐ Description](#-description)
+  - [⭐ Features](#-features)
+  - [⭐ Requirements](#-requirements)
+  - [⭐ Installation](#-installation)
+  - [⭐ Usage](#-usage)
+  - [⭐ Examples](#-examples)
+    - [🏷️ 1. View gene haplotypes and genotype data](#️-1-view-gene-haplotypes-and-genotype-data)
+    - [🏷️ 2. Perform haplotype statistical analysis](#️-2-perform-haplotype-statistical-analysis)
+    - [🏷️ 3. Visualize haplotype data](#️-3-visualize-haplotype-data)
+      - [1️⃣ Bar plot](#1️⃣-bar-plot)
+      - [️2️⃣ Pie plot](#️2️⃣-pie-plot)
+      - [️3️⃣ Box plot](#️3️⃣-box-plot)
+      - [️4️⃣ Network plot](#️4️⃣-network-plot)
+      - [️5️⃣ Gene haplotypes plot](#️5️⃣-gene-haplotypes-plot)
+    - [🏷️ 4. Network analysis](#️-4-network-analysis)
+    - [🏷️ 5. Multi-population analysis](#️-5-multi-population-analysis)
+    - [🏷️ 6. Selection sweep analysis](#️-6-selection-sweep-analysis)
+    - [🏷️ 7. GWAS analysis](#️-7-gwas-analysis)
+  - [⭐ Advanced Usage](#-advanced-usage)
+  - [⭐ Citation](#-citation)
 
 ### ⭐ Description
 A comprehensive Python library for gene haplotype analysis in natural populations, providing tools for viewing, analyzing, and visualizing genetic variation data.
@@ -56,6 +56,7 @@ Python 3.9 or higher and the following packages are required:
 - matplotlib
 - tomli
 - prettytable
+- networkx
 
 ### ⭐ Installation
 
