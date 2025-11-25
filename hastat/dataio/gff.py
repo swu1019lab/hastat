@@ -21,7 +21,9 @@ def read(file_path: str) -> gffutils.FeatureDB:
         if os.path.exists(file_path + '.sqlite3'):
             gff_in = gffutils.FeatureDB(file_path + '.sqlite3')
         else:
-            gff_in = gffutils.create_db(file_path, dbfn=file_path + '.sqlite3')
+            # Use merge_strategy='create_unique' to handle duplicate IDs (e.g. exons/CDS with same ID)
+            # by appending a unique suffix (e.g. _1, _2)
+            gff_in = gffutils.create_db(file_path, dbfn=file_path + '.sqlite3', merge_strategy='create_unique')
         for feature in gff_in.featuretypes():
             logger.info("The number of %s in the gff file: %d", feature, gff_in.count_features_of_type(feature))
         return gff_in
