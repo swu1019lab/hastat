@@ -6,6 +6,7 @@ height = 0.05 # the height to plot gene, should be within [0, 1] (relative to bb
 color = 'C0' # the color to plot feature
 feature = 'exon' # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
 gene_label_size = 10 # the fontsize of gene label
+gene_label_show = true # Whether to display the gene label
 
 ann_file = "" # the data of variant annotation, csv file, e.g., hap_ann.csv
 ann_y = 0.5 # the y value of annotation text (relative to bbox)
@@ -17,6 +18,14 @@ hap_height = 0.3 # the height of whole haplotypes plot (relative to bbox)
 hap_cols = [] # only show the haplotypes data of interested
 hap_label_show = true # Whether to display the haplotype labels
 hap_label_size = 8 # the fontsize of haplotype labels
+
+hap_group_file = "" # the group information of haplotypes, csv file with 2 columns: haplotype, group
+hap_freq_show = true # whether to show variant frequency
+hap_freq_height = 0.05 # height of frequency track
+hap_freq_y = 0 # the y value of frequency track (relative to bbox)
+hap_freq_plot_type = "bar" # plot type of frequency track: "bar" or "pie"
+hap_group_bar_x = -0.12 # x offset for group bar relative to haplotype matrix
+hap_group_bar_width = 0.02 # width of group bar
 
 pi_file = "" # the pi data of target region, csv file, e.g., gene.pi.csv with chrom,start,end,n_bases,counts,pi,groups
 pi_y = 0.5 # the y value of pi plot (relative to bbox)

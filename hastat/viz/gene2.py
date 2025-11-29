@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 import tomli
 from hastat.log.logger import logger
@@ -170,6 +171,24 @@ class FancyGene(object):
             return hap_data
         except Exception as e:
             logger.warning(f"Failed to load haplotype file {hap_file}: {e}")
+            return None
+    
+    def _load_haplotype_group_data(self, group_file):
+        """Load haplotype group data from CSV file."""
+        if not group_file or group_file == "":
+            return None
+        try:
+            group_data = pd.read_csv(group_file, header=None)
+            # Assuming 2 columns: haplotype, group
+            if len(group_data.columns) >= 2:
+                group_data.columns = ['haplotype', 'group'] + list(group_data.columns[2:])
+                logger.info(f"Loaded haplotype group data from {group_file}")
+                return group_data
+            else:
+                logger.warning(f"Invalid group file format: {group_file}")
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to load group file {group_file}: {e}")
             return None
     
     def _coordinate_transform(self, pos, bbox, gene_start, gene_end):
@@ -400,6 +419,16 @@ class FancyGene(object):
         hap_label_show = gene_config.get('hap_label_show', True)
         hap_label_size = gene_config.get('hap_label_size', 8)
         hap_cols = gene_config.get('hap_cols', [])
+        
+        # New config options
+        hap_group_file = gene_config.get('hap_group_file', '')
+        hap_freq_show = gene_config.get('hap_freq_show', True)
+        hap_freq_height = gene_config.get('hap_freq_height', 0.05)
+        hap_freq_y = gene_config.get('hap_freq_y', 0)
+        hap_freq_plot_type = gene_config.get('hap_freq_plot_type', 'bar')
+        hap_group_bar_x = gene_config.get('hap_group_bar_x', -0.12)
+        hap_group_bar_width = gene_config.get('hap_group_bar_width', 0.02)
+        
         hap_data = self._load_haplotype_data(hap_file, hap_cols)
         if hap_data is None:
             return
@@ -433,6 +462,37 @@ class FancyGene(object):
         if not hap_cols:
             return
 
+        # Load group data
+        group_data = self._load_haplotype_group_data(hap_group_file)
+        group_info = {} # hap -> group
+        if group_data is not None:
+            for _, row in group_data.iterrows():
+                group_info[row['haplotype']] = str(row['group'])
+        
+        # Sort haplotypes
+        if group_info:
+            # Filter haplotypes that are in group_info
+            hap_cols = [hap for hap in hap_cols if hap in group_info]
+            
+            if not hap_cols:
+                logger.warning("No haplotypes found in group file!")
+                return
+
+            # Sort by group then by haplotype name
+            hap_cols.sort(key=lambda x: (group_info[x], x))
+        else:
+            hap_cols.sort()
+
+        # Calculate layout
+        num_freq_tracks = 0
+        if hap_freq_show:
+            if group_info:
+                num_freq_tracks = len(set(group_info.values()))
+            else:
+                num_freq_tracks = 1
+        
+        total_freq_height = num_freq_tracks * hap_freq_height
+        
         # Calculate coordinates for equal-spaced grid
         hap_abs_x = x_start
         hap_abs_y = y_start + hap_y * bbox_height
@@ -452,6 +512,10 @@ class FancyGene(object):
         # Sort gene_hap by position to ensure consistent column order
         gene_hap_sorted = gene_hap.sort_values('pos')
         
+        # Determine edge properties based on number of haplotypes
+        edge_color = 'black' if num_haps <= 10 else None
+        line_width = 0.5 if num_haps <= 10 else 0
+        
         for hap_idx, hap_col in enumerate(hap_cols):
             for site_idx, (_, row) in enumerate(gene_hap_sorted.iterrows()):
                 genotype = row[hap_col]
@@ -465,19 +529,75 @@ class FancyGene(object):
                 rect = patches.Rectangle(
                     (cell_x, cell_y),
                     cell_width, cell_height,
-                    facecolor=color, edgecolor='black', linewidth=0.5
+                    facecolor=color, edgecolor=edge_color, linewidth=line_width
                 )
                 self.ax.add_patch(rect)
         
-        # Add haplotype labels on the left
-        if hap_label_show:
-            for hap_idx, hap_col in enumerate(hap_cols):
-                label_y = hap_abs_y + hap_idx * cell_height + cell_height/2
-                self.ax.text(
-                    hap_abs_x - 0.02, label_y,
-                    hap_col, ha='right', va='center', fontsize=hap_label_size
-                )
+        # Draw labels and group bars
+        if group_info:
+            # Group colors
+            unique_groups = sorted(list(set(group_info.values())))
+            # Use a colormap
+            group_cmap = LinearSegmentedColormap.from_list('group_cmap', ['#C5504B', '#114F8B', '#FCE988', '#90CAEE'], N=100)
+            colors = group_cmap(np.linspace(0, 1, len(unique_groups)))
+            group_colors = {grp: colors[i] for i, grp in enumerate(unique_groups)}
+
+            current_group = None
+            group_start_idx = 0
+            
+            for i, hap in enumerate(hap_cols):
+                grp = group_info[hap]
+                
+                # Draw hap label
+                if hap_label_show:
+                    label_y = hap_abs_y + i * cell_height + cell_height/2
+                    self.ax.text(
+                        hap_abs_x - 0.02, label_y,
+                        hap, ha='right', va='center', fontsize=hap_label_size
+                    )
+                
+                # Check for group change or end
+                if grp != current_group:
+                    if current_group is not None:
+                        # Draw previous group bar
+                        self._draw_group_bar(current_group, group_start_idx, i - 1, 
+                                           hap_abs_x, hap_abs_y, cell_height, group_colors[current_group],
+                                           hap_group_bar_x, hap_group_bar_width)
+                    current_group = grp
+                    group_start_idx = i
+                
+                if i == len(hap_cols) - 1:
+                    # Draw last group bar
+                    self._draw_group_bar(current_group, group_start_idx, i, 
+                                       hap_abs_x, hap_abs_y, cell_height, group_colors[current_group],
+                                       hap_group_bar_x, hap_group_bar_width)
+        else:
+            # Add haplotype labels on the left
+            if hap_label_show:
+                for hap_idx, hap_col in enumerate(hap_cols):
+                    label_y = hap_abs_y + hap_idx * cell_height + cell_height/2
+                    self.ax.text(
+                        hap_abs_x - 0.02, label_y,
+                        hap_col, ha='right', va='center', fontsize=hap_label_size
+                    )
         
+        # Draw frequency tracks
+        if hap_freq_show:
+            abs_freq_height = hap_freq_height * bbox_height
+            
+            # Calculate top of frequency tracks
+            # hap_freq_y is relative to bbox bottom
+            # We need absolute y for the top of the frequency tracks
+            # If hap_freq_y is the bottom of the tracks
+            freq_abs_bottom = y_start + hap_freq_y * bbox_height
+            freq_abs_top = freq_abs_bottom + total_freq_height * bbox_height
+            
+            self._draw_variant_frequency(
+                gene_hap_sorted, hap_cols, group_info if group_info else None,
+                hap_abs_x, freq_abs_top, cell_width, abs_freq_height, bbox_width,
+                hap_freq_plot_type
+            )
+
         # Draw connecting lines from haplotype columns to gene variant positions
         self._draw_haplotype_connections(gene_data, gene_hap_sorted, bbox, 
                                        hap_abs_x, hap_abs_y, hap_abs_height, 
@@ -766,6 +886,141 @@ class FancyGene(object):
         return legend_handles
 
     
+    def _draw_variant_frequency(self, gene_hap_sorted, hap_cols, group_info, 
+                              hap_abs_x, start_y, cell_width, freq_height, bbox_width, plot_type='bar'):
+        """Draw variant frequency tracks."""
+        # Calculate frequencies
+        # If group_info is present, calculate per group
+        # Otherwise calculate for all
+        
+        groups = []
+        if group_info is not None:
+            # Get unique groups in order
+            # group_info is a dict: hap -> group
+            # We want to draw tracks in some order. Maybe sorted group names?
+            # Or based on the order they appear in hap_cols (which are sorted)
+            seen_groups = []
+            for hap in hap_cols:
+                grp = group_info.get(hap, 'Unknown')
+                if grp not in seen_groups:
+                    seen_groups.append(grp)
+            groups = seen_groups
+        else:
+            groups = ['All']
+            
+        # Colors for REF and ALT
+        ref_color = '#559AD2'
+        alt_color = '#FE7270'
+        
+        num_sites = len(gene_hap_sorted)
+        
+        for i, group in enumerate(groups):
+            # Calculate Y position for this track
+            # We draw from top to bottom? Or bottom to top?
+            # start_y is the top of the frequency area (bottom of hap matrix)
+            # We want to draw downwards?
+            # Or start_y is the bottom of the frequency area?
+            # Let's assume start_y is the top of the first track (closest to matrix)
+            
+            track_y = start_y - (i + 1) * freq_height
+            
+            # Get haplotypes in this group
+            if group == 'All':
+                group_haps = hap_cols
+            else:
+                group_haps = [h for h in hap_cols if group_info.get(h, 'Unknown') == group]
+            
+            if not group_haps:
+                continue
+                
+            # Calculate frequencies for each site
+            for site_idx, (_, row) in enumerate(gene_hap_sorted.iterrows()):
+                # Get genotypes for this site and group
+                genotypes = row[group_haps]
+                
+                # Count REF (0) and ALT (not 0)
+                # Assuming 0 is REF.
+                # Filter out missing (-1) and heterozygous (1)
+                valid_genotypes = genotypes[(genotypes != -1) & (genotypes != 1)]
+                total = len(valid_genotypes)
+                if total == 0:
+                    continue
+                    
+                ref_count = (valid_genotypes == 0).sum()
+                alt_count = (valid_genotypes == 2).sum()
+                
+                ref_freq = ref_count / total
+                alt_freq = alt_count / total
+                
+                cell_x = hap_abs_x + site_idx * cell_width
+                
+                if plot_type == 'pie':
+                    # Draw pie chart
+                    center_x = cell_x + cell_width / 2
+                    center_y = track_y + freq_height / 2
+                    radius = min(cell_width, freq_height) * 0.45 # 0.45 to leave some padding
+                    
+                    # Draw REF wedge (start 0, extent ref_freq*360)
+                    if ref_freq > 0:
+                        wedge1 = patches.Wedge((center_x, center_y), radius, 0, ref_freq*360, facecolor=ref_color)
+                        self.ax.add_patch(wedge1)
+                    
+                    # Draw ALT wedge (start ref_freq*360, extent alt_freq*360)
+                    if alt_freq > 0:
+                        wedge2 = patches.Wedge((center_x, center_y), radius, ref_freq*360, 360, facecolor=alt_color)
+                        self.ax.add_patch(wedge2)
+                else:
+                    # Draw stacked bar
+                    # Draw ALT (bottom)
+                    if alt_freq > 0:
+                        rect = patches.Rectangle(
+                            (cell_x, track_y),
+                            cell_width, freq_height * alt_freq,
+                            facecolor=alt_color, edgecolor=None, linewidth=0
+                        )
+                        self.ax.add_patch(rect)
+                    
+                    # Draw REF (top)
+                    if ref_freq > 0:
+                        rect = patches.Rectangle(
+                            (cell_x, track_y + freq_height * alt_freq),
+                            cell_width, freq_height * ref_freq,
+                            facecolor=ref_color, edgecolor=None, linewidth=0
+                        )
+                        self.ax.add_patch(rect)
+            
+            # Add group label for the track
+            self.ax.text(
+                hap_abs_x - 0.02, track_y + freq_height/2,
+                f"{group} Freq", ha='right', va='center', fontsize=6
+            )
+    
+    def _draw_group_bar(self, group, start_idx, end_idx, hap_abs_x, hap_abs_y, cell_height, color, x_offset, width):
+        """Draw group bar and label."""
+        # y range: from start_idx * cell_height to (end_idx + 1) * cell_height
+        y_bottom = hap_abs_y + start_idx * cell_height
+        height = (end_idx - start_idx + 1) * cell_height
+        
+        # Position: left of hap label.
+        # Assuming hap label is around hap_abs_x - 0.02 to -0.08 depending on length.
+        # Let's put Group Rect at hap_abs_x + x_offset
+        rect_width = width
+        rect_x = hap_abs_x + x_offset
+        
+        rect = patches.Rectangle(
+            (rect_x, y_bottom),
+            rect_width, height,
+            facecolor=color, edgecolor='black', linewidth=0.5
+        )
+        self.ax.add_patch(rect)
+        
+        # Group Label
+        label_y = y_bottom + height / 2
+        self.ax.text(
+            rect_x - 0.01, label_y,
+            group, ha='right', va='center', fontsize=8, fontweight='bold'
+        )
+    
     def plot(self):
         """Create the gene visualization plot."""
         # Add data from config
@@ -782,6 +1037,7 @@ class FancyGene(object):
         for i, gene_id in enumerate(self.genes):
             gene_config = self._get_gene_config(gene_id)
             gene_label_size = gene_config.get('gene_label_size', 10)
+            gene_label_show = gene_config.get('gene_label_show', True)
             gene_data = self.gene_data[gene_id]
             
             # Get bbox from config or use default
@@ -809,13 +1065,14 @@ class FancyGene(object):
             self._draw_fst_plot(gene_data, gene_config, bbox)
             
             # Add gene name label
-            self.ax.annotate(
-                gene_id,
-                xy=(bbox[0] + bbox[2]/2, bbox[1]),
-                xytext=(0, -10),
-                textcoords='offset points',
-                ha='center', va='center', fontsize=gene_label_size, weight='bold'
-            )
+            if gene_label_show:
+                self.ax.annotate(
+                    gene_id,
+                    xy=(bbox[0] + bbox[2]/2, bbox[1]),
+                    xytext=(0, -10),
+                    textcoords='offset points',
+                    ha='center', va='center', fontsize=gene_label_size, weight='bold'
+                )
         
         # Set axis properties
         # self.ax.set_xlim(-0.1, 1.1)
