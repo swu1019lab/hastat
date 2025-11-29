@@ -125,6 +125,7 @@ hastat view -v test.vcf -a test.gff --homo gene1,gene2,gene3 -t group -o homolog
 ```
 
 **Selection sweep analysis (π and FST):**
+
 `sample_groups.csv`
 ```csv
 samples,groups
