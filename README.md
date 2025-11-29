@@ -32,7 +32,7 @@ A comprehensive Python library for gene haplotype analysis in natural population
 Main modules:
 - [x] `view` - View genotype, haplotype, pi, fst, ld data of interested genes in VCF files
 - [x] `stat` - Perform haplotype statistical analysis with multiple phenotypes using ANOVA and multiple comparisons
-- [x] `plot` - Visualize haplotype data using bar, pie, box, network, and gene structure plots
+- [x] `plot` - Visualize haplotype data using bar, pie, box, network, and gene haplotye plots
 - [x] `network` - Perform haplotype network analysis using MST and MSN methods
 - [x] `gwas` - Perform GWAS analysis using GEMMA wrapper
 
@@ -125,12 +125,26 @@ hastat view -v test.vcf -a test.gff --homo gene1,gene2,gene3 -t group -o homolog
 ```
 
 **Selection sweep analysis (π and FST):**
+`sample_groups.csv`
+```csv
+samples,groups
+sample1,group1
+sample2,group1
+sample3,group1
+sample4,group1
+sample5,group1
+sample6,group2
+sample7,group2
+sample8,group2
+sample9,group2
+```
+
 ```bash
 # π analysis
-hastat view -t pi -v test.vcf -a test.gff -i gene_id -u 2000 -g population_groups.csv -o pi_results --size 1000 --step 100
+hastat view -t pi -v test.vcf -a test.gff -i gene_id -u 2000 -g sample_groups.csv -o pi_results --size 1000 --step 100
 
 # FST analysis
-hastat view -t fst -v test.vcf -a test.gff -i gene_id -u 2000 -g population_groups.csv -o fst_results --size 1000 --step 100
+hastat view -t fst -v test.vcf -a test.gff -i gene_id -u 2000 -g sample_groups.csv -o fst_results --size 1000 --step 100
 ```
 
 Available view types:
@@ -219,7 +233,9 @@ hastat plot box \
 --sample_hap hap_groups.csv \
 --sample_phe sample_phe.csv \
 --phe_index 1 \
---comparisons Hap1 Hap2 Hap1 Hap3 Hap2 Hap4 \
+--comparisons Hap1 Hap2 \
+--comparisons Hap1 Hap3 \
+--comparisons Hap1 Hap4 \
 --method t-test \
 --haplotypes Hap1 Hap2 Hap3 Hap4 \
 -o haplotype_box.png \
@@ -252,8 +268,8 @@ hastat plot network \
 ```bash
 hastat plot gene \
 --gff annotation.gff \
---genes gene1 gene2 gene3 \
---toml gene_config.toml \
+--genes gene1 \
+--toml gene.toml \
 --upstream 2000 \
 --downstream 1000 \
 -o gene_haplotypes.png \
