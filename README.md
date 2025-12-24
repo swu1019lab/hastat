@@ -25,7 +25,7 @@
 |:---|:---|
 | 🧬 **`view`** | Extract and analyze genotype, haplotype, $\pi$, $F_{ST}$, and LD data from VCF files. |
 | 📊 **`stat`** | Perform robust statistical analysis (ANOVA, multiple comparisons) linking haplotypes to phenotypes. |
-| 🎨 **`plot`** | Generate high-quality visualizations: Bar, Pie, Box, Network, and Gene Structure plots. |
+| 🎨 **`plot`** | Generate high-quality visualizations: Bar, Pie, Box, Network, and Gene haplotype plots. |
 | 🕸️ **`network`** | Construct haplotype networks using Minimum Spanning Tree (MST) and Minimum Spanning Network (MSN). |
 | 🔬 **`gwas`** | Integrated wrapper for GEMMA to perform Genome-Wide Association Studies. |
 
