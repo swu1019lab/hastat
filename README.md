@@ -2,8 +2,6 @@
 
 <img src="tests/hastat.png" alt="hastat logo" width="200"/>
 
----
-
 **A Comprehensive Toolkit for Gene Haplotype Analysis in Natural Populations**
 
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.11001623-blue)](https://doi.org/10.5281/zenodo.11183815)
