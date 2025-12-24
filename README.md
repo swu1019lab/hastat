@@ -2,7 +2,7 @@
 
 <img src="tests/hastat.png" alt="hastat logo" width="200"/>
 
-# hastat
+---
 
 **A Comprehensive Toolkit for Gene Haplotype Analysis in Natural Populations**
 
