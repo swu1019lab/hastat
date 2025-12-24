@@ -208,6 +208,8 @@ class FancyGene(object):
         height = gene_config.get('height', 0.2)
         color = gene_config.get('color', 'C1')
         feature_type = gene_config.get('feature', 'CDS')
+        gene_label_size = gene_config.get('gene_label_size', 10)
+        gene_label_show = gene_config.get('gene_label_show', True)
         
         # Calculate absolute coordinates
         abs_x = x_start + xy[0] * bbox_width
@@ -264,6 +266,16 @@ class FancyGene(object):
                 )
             self.ax.add_patch(arrow)
         
+        # Add gene name label
+        if gene_label_show:
+            self.ax.annotate(
+                gene_data['gene_id'],
+                xy=(abs_x + abs_width/2, abs_y + abs_height/2),
+                xytext=(0, 5),
+                textcoords='offset points',
+                ha='center', va='bottom', fontsize=gene_label_size, weight='bold'
+            )
+
         return abs_x, abs_y, abs_width, abs_height
     
     def _draw_annotations(self, gene_data, gene_config, bbox, gene_coords):
@@ -1036,8 +1048,6 @@ class FancyGene(object):
         # Plot each gene according to its configuration
         for i, gene_id in enumerate(self.genes):
             gene_config = self._get_gene_config(gene_id)
-            gene_label_size = gene_config.get('gene_label_size', 10)
-            gene_label_show = gene_config.get('gene_label_show', True)
             gene_data = self.gene_data[gene_id]
             
             # Get bbox from config or use default
@@ -1063,16 +1073,6 @@ class FancyGene(object):
             
             # Draw fst plot if available
             self._draw_fst_plot(gene_data, gene_config, bbox)
-            
-            # Add gene name label
-            if gene_label_show:
-                self.ax.annotate(
-                    gene_id,
-                    xy=(bbox[0] + bbox[2]/2, bbox[1]),
-                    xytext=(0, -10),
-                    textcoords='offset points',
-                    ha='center', va='center', fontsize=gene_label_size, weight='bold'
-                )
         
         # Set axis properties
         # self.ax.set_xlim(-0.1, 1.1)
