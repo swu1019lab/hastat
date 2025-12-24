@@ -147,20 +147,55 @@ Visualize results. Subcommands: `bar`, `pie`, `box`, `network`, `gene`.
 
 **Gene Plot Configuration (`gene.toml`):**
 Control the appearance of gene structure plots using a TOML file.
+
+| Parameter | Type | Description | Default |
+|:---|:---|:---|:---|
+| **Gene Structure** | | | |
+| `bbox` | list | Bounding box `[x, y, width, height]` relative to figure. | `[0.1, 0.1, 0.8, 0.8]` |
+| `xy` | list | Gene anchor point `[x, y]` relative to bbox. | `[0, 0.5]` |
+| `width` | float | Gene width relative to bbox. | `1.0` |
+| `height` | float | Gene height relative to bbox. | `0.1` |
+| `color` | string | Gene color. | `"C1"` |
+| `feature` | string | Feature to plot (e.g., "CDS", "exon"). | `"CDS"` |
+| `gene_label_show` | bool | Whether to show gene name label. | `true` |
+| `gene_label_size` | int | Font size for gene label. | `10` |
+| **Annotation** | | | |
+| `ann_file` | string | Path to variant annotation CSV file. | `""` |
+| `ann_y` | float | Y position for annotations relative to bbox. | `0.8` |
+| `ann_text_size` | int | Font size for annotation text. | `8` |
+| **Haplotypes** | | | |
+| `hap_file` | string | Path to haplotype data CSV file. | `""` |
+| `hap_y` | float | Y position for haplotype matrix relative to bbox. | `0.0` |
+| `hap_height` | float | Height of haplotype matrix relative to bbox. | `0.3` |
+| `hap_cols` | list | List of specific haplotypes to show (empty for all). | `[]` |
+| `hap_label_show` | bool | Whether to show haplotype labels. | `true` |
+| `hap_label_size` | int | Font size for haplotype labels. | `8` |
+| **Haplotype Groups** | | | |
+| `hap_group_file` | string | Path to haplotype group CSV file. | `""` |
+| `hap_group_bar_x` | float | X position offset for group bar. | `-0.12` |
+| `hap_group_bar_width` | float | Width of group bar. | `0.02` |
+| `hap_freq_show` | bool | Whether to show frequency tracks. | `true` |
+| `hap_freq_height` | float | Height of each frequency track. | `0.05` |
+| `hap_freq_y` | float | Y position for frequency tracks. | `-0.2` |
+| `hap_freq_plot_type` | string | Plot type: `"bar"` or `"pie"`. | `"bar"` |
+| **Tracks (Pi/Fst)** | | | |
+| `pi_file` | string | Path to Pi data CSV file. | `""` |
+| `pi_y` | float | Y position for Pi plot. | `0.6` |
+| `pi_height` | float | Height of Pi plot. | `0.15` |
+| `pi_style` | string | Plot style: `"line"` or `"fill"`. | `"fill"` |
+| `fst_file` | string | Path to Fst data CSV file. | `""` |
+| `fst_y` | float | Y position for Fst plot. | `0.8` |
+| `fst_height` | float | Height of Fst plot. | `0.15` |
+| `fst_style` | string | Plot style: `"line"` or `"fill"`. | `"fill"` |
+
 ```toml
 [default]
-# Gene Structure
+# Example configuration
 bbox = [0.1, 0.1, 0.8, 0.8]
 color = "C1"
 gene_label_show = true
-
-# Haplotypes
 hap_file = "haplotypes.csv"
-hap_label_show = true
-
-# Tracks
 pi_file = "pi.csv"
-fst_file = "fst.csv"
 ```
 </details>
 
