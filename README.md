@@ -185,8 +185,9 @@ Construct and visualize haplotype networks (Minimum Spanning Tree/Network).
 2.  **Build Network**: `hastat network -t table.csv -o network.txt`
 3.  **Visualize**: `hastat plot network --file network.txt ...`
 
+---
 
-Here is a step-by-step guide based on a typical workflow:
+### Here is a step-by-step guide based on a typical workflow
 
 ### Step 1: Generate Haplotype Table
 Extract haplotypes for a specific gene from a VCF file.
