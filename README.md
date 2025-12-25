@@ -37,72 +37,225 @@
 
 ## 📦 Installation
 
-### Requirements
-- Python 3.9+
-- Dependencies: `pandas`, `numpy`, `scipy`, `statsmodels`, `scikit-allel`, `gffutils`, `pysam`, `matplotlib`, `tomli`, `prettytable`, `networkx`
+### 1. Prerequisites
+- **Python 3.9+**
+- **Dependencies**: `pandas`, `numpy`, `scipy`, `statsmodels`, `scikit-allel`, `gffutils`, `pysam`, `matplotlib`, `tomli`, `prettytable`, `networkx`
 
-### Install via Source
+You can check your Python version with:
+```bash
+python --version
+```
+
+### 2. Download Source Code
+Clone the repository from GitHub to your local machine:
 ```bash
 git clone https://github.com/swu1019lab/hastat.git
 cd hastat
+```
 
-# Option 1: Using build (Recommended)
-pip install build --user
-python -m build
-pip install dist/hastat-1.0.0.tar.gz --user
+### 3. Install hastat
+You can install `hastat` using either the modern `build` system (recommended) or `setup.py`.
 
-# Option 2: Using setup.py
+**Tip for users in China:** To speed up dependency downloading, you can use the Tsinghua PyPI mirror by adding `-i https://pypi.tuna.tsinghua.edu.cn/simple` to pip commands.
+
+#### Option A: Using `build` (Recommended)
+This method builds a standard distribution package and installs it.
+
+1.  **Install the build tool**:
+    ```bash
+    pip install build --user -i https://pypi.tuna.tsinghua.edu.cn/simple
+    ```
+2.  **Build the package**:
+    ```bash
+    python -m build
+    ```
+    *Explanation: This command compiles the source code and creates a `dist/` directory containing the installable package file (e.g., `hastat-1.0.0.tar.gz`).*
+3.  **Install the package**:
+    ```bash
+    pip install dist/hastat-1.0.0.tar.gz --user -i https://pypi.tuna.tsinghua.edu.cn/simple
+    ```
+    *Explanation: This installs the `hastat` library and its dependencies (pandas, numpy, etc.) into your Python environment.*
+
+#### Option B: Using `setup.py` (Legacy)
+```bash
 python setup.py install --user
 ```
 
-## 🚀 Usage
+### 4. Installation Location
+When using the `--user` flag (recommended to avoid permission issues):
+- **Linux/macOS**: The executable `hastat` is typically placed in `~/.local/bin`.
+  - *Note: You may need to add this path to your `$PATH` environment variable if `hastat` command is not found.*
+- **Windows**: It is placed in your user's Python Scripts directory, e.g., `C:\Users\YourName\AppData\Roaming\Python\Python39\Scripts`.
+
+To verify the installation, run:
+```bash
+hastat --help
+```
+
+## 🚀 Usage Guide
 
 The general syntax for `hastat` is:
 ```bash
 hastat <subcommand> [options]
 ```
 
-### Quick Start Examples
+### 1. View Module (`hastat view`)
+The `view` module is the core tool for extracting genetic data and calculating population genetics statistics.
 
-#### 1. View Haplotypes
-Extract haplotype groups for a specific gene:
+#### 📍 Flexible Input Modes
+`hastat` allows you to define target loci in multiple ways:
+- **Single Gene**: `-i GeneID` (Requires GFF file via `-a`)
+- **Genomic Region**: `-r chr:start-end` (e.g., `chr1:1000-5000`)
+- **Batch List**: `-l gene_list.txt` (Process a list of gene IDs automatically)
+- **Homologous Genes**: `--homo GeneA,GeneB` (Analyze multiple homologs as a single unit)
+
+#### 📏 Region Extension & Control
+You can extend the analysis scope beyond the gene body, which is crucial for analyzing promoter regions or regulatory elements.
+- **`--upstream <int>`**: Extend $N$ bp upstream of the gene/region start.
+- **`--downstream <int>`**: Extend $N$ bp downstream of the gene/region end.
+
+> **Note**: These parameters apply to **all** analysis types. For example, if you calculate $F_{ST}$ with `-u 2000`, the sliding window analysis will start 2kb upstream of the gene.
+
+#### 🧬 Analysis Types (`-t/--type`)
+| Type | Description |
+|:---|:---|
+| `geno` | Extract raw genotype matrix (0/0, 0/1, 1/1). |
+| `table` | Generate a haplotype table for samples. |
+| `group` | Group samples by their haplotypes. |
+| `freq` | Calculate haplotype frequencies. |
+| `compare` | **Multi-Population Mode**: Compare haplotypes across multiple VCF files. |
+| `pi` | Calculate Nucleotide Diversity ($\pi$). |
+| `fst` | Calculate Fixation Index ($F_{ST}$). |
+
+#### 📊 Population Genetics ($\pi$ & $F_{ST}$)
+`hastat` calculates $\pi$ and $F_{ST}$ using a **sliding window** approach.
+
+- **Method**:
+    1.  **Region Definition**: The total analysis region is determined by the gene coordinates plus any `--upstream` or `--downstream` extension.
+    2.  **Sliding Windows**: Windows of size `--size` move across this region with a step of `--step`.
+    3.  **Calculation**: Metrics are computed for each window based on sample groups provided in `-g`.
+- **Required Arguments**:
+    - `-g, --group`: CSV file defining sample populations (Columns: Sample, Group).
+    - `-w, --size`: Window size in bp (e.g., `1000`).
+    - `-s, --step`: Step size in bp (e.g., `100`).
+
+**Example: Selection Sweep Analysis**
+Calculate $F_{ST}$ for a gene and its 2kb upstream promoter, using 1kb windows sliding every 100bp:
 ```bash
-hastat view -v data.vcf.gz -a annotation.gff3 -i GeneID -t group -o output_prefix
+hastat view -v data.vcf.gz -a ann.gff3 -i GeneID \
+    -t fst -g sample_groups.csv \
+    -u 2000 --size 1000 --step 100 -o output_prefix
 ```
 
-#### 2. Statistical Analysis
-Test if haplotypes are associated with phenotypic traits:
+### 2. Statistics Module (`hastat stat`)
+Perform statistical tests to associate haplotypes with phenotypes.
+- **Input**: Haplotype groups (from `view -t group`) and Phenotype data (`-p`).
+- **Method**: ANOVA followed by multiple comparisons (`TukeyHSD` or `AllPairTest`).
+
 ```bash
-hastat stat -g hap_groups.csv -p phenotypes.csv -o stats_results.csv
+hastat stat -g hap_groups.csv -p traits.csv -a GeneID -o stat_results.csv
 ```
 
-#### 3. Visualization
-Plot haplotype frequencies as a bar chart:
+### 3. Visualization (`hastat plot`)
+Generate high-quality visualizations for your data.
+
+#### Common Plot Types
+- **`bar` / `pie`**: Visualize haplotype frequencies in different populations.
+- **`box`**: Compare phenotypic values among haplotypes or populations.
+    - Supports significance testing (t-test, U-test).
+    - Use `--comparisons` to specify pairs for testing.
+
+#### Gene Structure & Tracks (`hastat plot gene`)
+Visualize the gene model along with haplotype variations and statistical tracks ($\pi$, $F_{ST}$).
+- **Configuration**: Uses a TOML file to control layout, colors, and tracks.
+- **Features**:
+    - Plot CDS/Exon structure.
+    - Align haplotype variations to the gene.
+    - Display sliding window tracks for selection signatures.
+
+**Example: Plotting Gene with Tracks**
 ```bash
-hastat plot bar --sample_hap hap_groups.csv --sample_group pop_info.csv -o plot.png
+hastat plot gene --gff ann.gff3 --genes GeneID --toml config.toml \
+    --upstream 2000 --downstream 1000 -o gene_plot.pdf
 ```
 
----
+### 4. Network Analysis (`hastat network`)
+Construct and visualize haplotype networks (Minimum Spanning Tree/Network).
+1.  **Generate Table**: `hastat view -t table ...`
+2.  **Build Network**: `hastat network -t table.csv -o network.txt`
+3.  **Visualize**: `hastat plot network --file network.txt ...`
+
+## 💡 Advanced Examples
+
+### Multi-Population Comparison
+Compare haplotype frequencies between two populations (e.g., Panel1 vs Panel2).
+
+```bash
+# 1. Compare haplotypes from two VCFs
+hastat view -t compare \
+    -v panel1.vcf.gz panel2.vcf.gz \
+    -n Panel1 Panel2 \
+    -i GeneID -a ann.gff3 -o comparison_result
+
+# 2. Visualize the comparison
+hastat plot bar --sample_hap comparison_result.merged.group.csv \
+    --sample_group pop_info.csv -o comparison_bar.pdf
+```
+
+### Large-Scale Selection Sweep
+Scan a large genomic region (e.g., 1Mb upstream/downstream) for selection signals.
+
+```bash
+hastat view -t fst \
+    -v data.vcf.gz -a ann.gff3 -i GeneID \
+    -u 1000000 -d 1000000 \
+    -g sample_groups.csv \
+    --size 100000 --step 10000 \
+    -o large_scale_fst
+```
 
 ## 📚 Documentation
 
 <details>
 <summary><strong>1. View Module (`hastat view`)</strong></summary>
 
-Analyze haplotypes and genetic statistics.
+The `view` module is the entry point for extracting and analyzing genetic data. It supports flexible input methods and various analysis types.
 
-| Argument | Description |
-|:---|:---|
-| `-v, --vcf` | Input VCF file(s). Required. |
-| `-a, --gff` | GFF3 annotation file. |
-| `-i, --gene_id` | Target Gene ID. |
-| `-r, --region` | Target region (`chr:start-end`). |
-| `--homo` | Comma-separated homologous gene IDs. |
-| `-t, --type` | Analysis type: `geno`, `table`, `group`, `freq`, `pi`, `fst`, `compare`. |
-| `-g, --group` | Population group CSV file. |
-| `-w, --size` | Window size for sliding window analysis (default: 1). |
-| `-s, --step` | Step size for sliding window analysis (default: 1). |
-| `--het` | Heterozygosity filter threshold (0-1). |
+#### Input Modes
+| Mode | Argument | Description |
+|:---|:---|:---|
+| **Single Gene** | `-i GeneID` | Analyze a specific gene. Requires `-a/--gff`. |
+| **Region** | `-r chr:start-end` | Analyze a specific genomic region (e.g., `chr1:1000-2000`). |
+| **Batch Genes** | `-l list.txt` | Analyze a list of genes provided in a file (one ID per line). Requires `-a/--gff`. |
+| **Homologous** | `--homo ID1,ID2` | Analyze multiple homologous genes simultaneously. Requires `-a/--gff`. |
+
+#### Region Control
+You can extend the analysis region (e.g., to include promoters) using:
+- `-u, --upstream <int>`: Extend $N$ bp upstream.
+- `-d, --downstream <int>`: Extend $N$ bp downstream.
+
+#### Analysis Types (`-t, --type`)
+- **`geno`**: Extract genotype matrix.
+- **`table`**: Generate haplotype table.
+- **`group`**: Group samples by haplotypes.
+- **`freq`**: Calculate haplotype frequencies.
+- **`compare`**: Compare haplotypes across multiple populations (VCFs).
+- **`pi`**: Calculate Nucleotide Diversity ($\pi$).
+- **`fst`**: Calculate Fixation Index ($F_{ST}$).
+
+#### Population Genetics Statistics ($\pi$ & $F_{ST}$)
+For `pi` and `fst` analysis, `hastat` uses a sliding window approach:
+- **Windowing**: Controlled by `-w/--size` (window size, default 1bp) and `-s/--step` (step size, default 1bp).
+- **Grouping**: Requires a sample group file via `-g/--group` (csv: sample,group).
+- **Calculation**:
+    - **$\pi$**: Calculated for each group in the window.
+    - **$F_{ST}$**: Calculated for all pairwise combinations of groups in the window.
+    - **Region**: The analysis region is determined by the gene/region input plus any upstream/downstream extension.
+
+**Example:** Calculate $F_{ST}$ for a gene plus 2kb upstream, using 1kb windows with 100bp step:
+```bash
+hastat view -v data.vcf.gz -a ann.gff3 -i GeneID -u 2000 -t fst -g groups.csv --size 1000 --step 100
+```
 </details>
 
 <details>
@@ -210,55 +363,6 @@ Run GWAS using GEMMA.
 </details>
 
 ---
-
-## 💡 Advanced Examples
-
-### 🧬 Multi-Population Comparison
-Compare haplotype frequencies and diversity between populations.
-
-```bash
-# 1. Generate comparison data
-hastat view -t compare -v pop1.vcf.gz pop2.vcf.gz -n Pop1 Pop2 -a ann.gff -i GeneID -o comparison
-
-# 2. Statistical analysis
-hastat stat -g comparison.merged.group.csv -p traits.csv -o stat_results.csv
-
-# 3. Visualize
-hastat plot bar --sample_hap comparison.merged.group.csv --sample_group pop_info.csv -o comparison_bar.png
-```
-
-### 🕸️ Haplotype Network Analysis
-Create a haplotype network to visualize evolutionary relationships.
-
-```bash
-# 1. Generate haplotype table
-hastat view -v data.vcf -a ann.gff -i GeneID -t table -o hap_table
-
-# 2. Construct network (MST)
-hastat network -t hap_table.csv -o network.txt -m MST
-
-# 3. Plot network
-hastat plot network \
-    --file network.txt \
-    --sample_hap hap_groups.csv \
-    --sample_group pop_info.csv \
-    --layout spring \
-    --node_color '#C5504B' '#FCE988' '#90CAEE' \
-    -o network_plot.png
-```
-
-### 📉 Selection Sweep Analysis ($\pi$ & $F_{ST}$)
-Scan for selection signatures using sliding windows.
-
-```bash
-# Nucleotide Diversity (Pi)
-hastat view -t pi -v data.vcf -a ann.gff -i GeneID \
-    -g pop_info.csv --size 1000 --step 100 -o pi_results
-
-# Fixation Index (Fst)
-hastat view -t fst -v data.vcf -a ann.gff -i GeneID \
-    -g pop_info.csv --size 1000 --step 100 -o fst_results
-```
 
 ## 📄 Citation
 
