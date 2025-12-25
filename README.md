@@ -35,6 +35,22 @@
 - ✅ **Homologous Genes**: Analyze multiple homologous genes simultaneously.
 - ✅ **Customization**: Flexible grouping, filtering (heterozygosity), and statistical methods.
 
+### Comparison with Other Tools
+| Feature | hastat | plink | vcftools | bcftools |
+| :--- | :---: | :---: | :---: | :---: |
+| **Focus** | Gene Haplotypes | GWAS/Association | VCF Manipulation | VCF Manipulation |
+| **Haplotype Visualization** | ✅ (Rich) | ❌ | ❌ | ❌ |
+| **Haplotype Network** | ✅ | ❌ | ❌ | ❌ |
+| **Phenotype Association** | ✅ (ANOVA/Tukey) | ✅ (GLM/LMM) | ❌ | ❌ |
+| **Selection Signals ($\pi$/$F_{ST}$)** | ✅ (Visualization included) | ❌ | ✅ (Calc only) | ❌ |
+| **Homologous Gene Support** | ✅ | ❌ | ❌ | ❌ |
+
+### ⚠️ Limitations
+`hastat` is specialized for gene-centric haplotype analysis and visualization. It is **NOT** designed for:
+- **Raw Data Processing**: It does not handle FASTQ/BAM files or perform variant calling.
+- **Whole-Genome Operations**: For filtering or merging massive whole-genome VCFs, use `bcftools` or `vcftools`.
+- **Complex Pedigrees**: It focuses on natural populations, not family-based linkage analysis.
+
 ## 📦 Installation
 
 ### 1. Prerequisites
@@ -198,7 +214,7 @@ hastat view \
     -a annotation.gff3 \
     -i GeneID \
     -u 2000 \
-    -o results/GeneID.table
+    -o results/GeneID
 ```
 
 ### Step 2: Group Samples by Haplotype
@@ -210,7 +226,7 @@ hastat view \
     -a annotation.gff3 \
     -i GeneID \
     -u 2000 \
-    -o results/GeneID.group
+    -o results/GeneID
 ```
 
 ### Step 3: Statistical Analysis
@@ -278,7 +294,7 @@ hastat view \
     -u 1000000 \
     -d 1000000 \
     -g sample_groups.csv \
-    -o results/GeneID.fst \
+    -o results/GeneID \
     --size 10000 \
     --step 1000
 
@@ -291,7 +307,7 @@ hastat view \
     -u 1000000 \
     -d 1000000 \
     -g sample_groups.csv \
-    -o results/GeneID.pi \
+    -o results/GeneID \
     --size 10000 \
     --step 1000
 ```
