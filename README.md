@@ -99,6 +99,93 @@ The general syntax for `hastat` is:
 hastat <subcommand> [options]
 ```
 
+### 1. View Module (`hastat view`)
+The `view` module is the core tool for extracting genetic data and calculating population genetics statistics.
+
+#### 📍 Flexible Input Modes
+`hastat` allows you to define target loci in multiple ways:
+- **Single Gene**: `-i GeneID` (Requires GFF file via `-a`)
+- **Genomic Region**: `-r chr:start-end` (e.g., `chr1:1000-5000`)
+- **Batch List**: `-l gene_list.txt` (Process a list of gene IDs automatically)
+- **Homologous Genes**: `--homo GeneA,GeneB` (Analyze multiple homologs as a single unit)
+
+#### 📏 Region Extension & Control
+You can extend the analysis scope beyond the gene body, which is crucial for analyzing promoter regions or regulatory elements.
+- **`--upstream <int>`**: Extend $N$ bp upstream of the gene/region start.
+- **`--downstream <int>`**: Extend $N$ bp downstream of the gene/region end.
+
+> **Note**: These parameters apply to **all** analysis types. For example, if you calculate $F_{ST}$ with `-u 2000`, the sliding window analysis will start 2kb upstream of the gene.
+
+#### 🧬 Analysis Types (`-t/--type`)
+| Type | Description |
+|:---|:---|
+| `geno` | Extract raw genotype matrix (0/0, 0/1, 1/1). |
+| `table` | Generate a haplotype table for samples. |
+| `group` | Group samples by their haplotypes. |
+| `freq` | Calculate haplotype frequencies. |
+| `compare` | **Multi-Population Mode**: Compare haplotypes across multiple VCF files. |
+| `pi` | Calculate Nucleotide Diversity ($\pi$). |
+| `fst` | Calculate Fixation Index ($F_{ST}$). |
+
+#### 📊 Population Genetics ($\pi$ & $F_{ST}$)
+`hastat` calculates $\pi$ and $F_{ST}$ using a **sliding window** approach.
+
+- **Method**:
+    1.  **Region Definition**: The total analysis region is determined by the gene coordinates plus any `--upstream` or `--downstream` extension.
+    2.  **Sliding Windows**: Windows of size `--size` move across this region with a step of `--step`.
+    3.  **Calculation**: Metrics are computed for each window based on sample groups provided in `-g`.
+- **Required Arguments**:
+    - `-g, --group`: CSV file defining sample populations (Columns: Sample, Group).
+    - `-w, --size`: Window size in bp (e.g., `1000`).
+    - `-s, --step`: Step size in bp (e.g., `100`).
+
+**Example: Selection Sweep Analysis**
+Calculate $F_{ST}$ for a gene and its surrounding region (extended 1MB upstream and downstream) using a sliding window approach (Reference: [Nature Genetics, 2020](https://www.nature.com/articles/s41588-020-0604-7)):
+```bash
+hastat view -v data.vcf.gz -a ann.gff3 -i GeneID \
+    -t fst -g sample_groups.csv \
+    -u 1000000 -d 1000000 --size 10000 --step 10000 -o output_prefix
+```
+
+### 2. Statistics Module (`hastat stat`)
+Perform statistical tests to associate haplotypes with phenotypes.
+- **Input**: Haplotype groups (from `view -t group`) and Phenotype data (`-p`).
+- **Method**: ANOVA followed by multiple comparisons (`TukeyHSD` or `AllPairTest`).
+
+```bash
+hastat stat -g hap_groups.csv -p traits.csv -a GeneID -o stat_results.csv
+```
+
+### 3. Visualization (`hastat plot`)
+Generate high-quality visualizations for your data.
+
+#### Common Plot Types
+- **`bar` / `pie`**: Visualize haplotype frequencies in different populations.
+- **`box`**: Compare phenotypic values among haplotypes or populations.
+    - Supports significance testing (t-test, U-test).
+    - Use `--comparisons` to specify pairs for testing.
+
+#### Gene Structure & Tracks (`hastat plot gene`)
+Visualize the gene model along with haplotype variations and statistical tracks ($\pi$, $F_{ST}$).
+- **Configuration**: Uses a TOML file to control layout, colors, and tracks.
+- **Features**:
+    - Plot CDS/Exon structure.
+    - Align haplotype variations to the gene.
+    - Display sliding window tracks for selection signatures.
+
+**Example: Plotting Gene with Tracks**
+```bash
+hastat plot gene --gff ann.gff3 --genes GeneID --toml config.toml \
+    --upstream 2000 --downstream 1000 -o gene_plot.pdf
+```
+
+### 4. Network Analysis (`hastat network`)
+Construct and visualize haplotype networks (Minimum Spanning Tree/Network).
+1.  **Generate Table**: `hastat view -t table ...`
+2.  **Build Network**: `hastat network -t table.csv -o network.txt`
+3.  **Visualize**: `hastat plot network --file network.txt ...`
+
+
 Here is a step-by-step guide based on a typical workflow:
 
 ### Step 1: Generate Haplotype Table
@@ -207,92 +294,6 @@ hastat view \
     --size 10000 \
     --step 1000
 ```
-
-### 1. View Module (`hastat view`)
-The `view` module is the core tool for extracting genetic data and calculating population genetics statistics.
-
-#### 📍 Flexible Input Modes
-`hastat` allows you to define target loci in multiple ways:
-- **Single Gene**: `-i GeneID` (Requires GFF file via `-a`)
-- **Genomic Region**: `-r chr:start-end` (e.g., `chr1:1000-5000`)
-- **Batch List**: `-l gene_list.txt` (Process a list of gene IDs automatically)
-- **Homologous Genes**: `--homo GeneA,GeneB` (Analyze multiple homologs as a single unit)
-
-#### 📏 Region Extension & Control
-You can extend the analysis scope beyond the gene body, which is crucial for analyzing promoter regions or regulatory elements.
-- **`--upstream <int>`**: Extend $N$ bp upstream of the gene/region start.
-- **`--downstream <int>`**: Extend $N$ bp downstream of the gene/region end.
-
-> **Note**: These parameters apply to **all** analysis types. For example, if you calculate $F_{ST}$ with `-u 2000`, the sliding window analysis will start 2kb upstream of the gene.
-
-#### 🧬 Analysis Types (`-t/--type`)
-| Type | Description |
-|:---|:---|
-| `geno` | Extract raw genotype matrix (0/0, 0/1, 1/1). |
-| `table` | Generate a haplotype table for samples. |
-| `group` | Group samples by their haplotypes. |
-| `freq` | Calculate haplotype frequencies. |
-| `compare` | **Multi-Population Mode**: Compare haplotypes across multiple VCF files. |
-| `pi` | Calculate Nucleotide Diversity ($\pi$). |
-| `fst` | Calculate Fixation Index ($F_{ST}$). |
-
-#### 📊 Population Genetics ($\pi$ & $F_{ST}$)
-`hastat` calculates $\pi$ and $F_{ST}$ using a **sliding window** approach.
-
-- **Method**:
-    1.  **Region Definition**: The total analysis region is determined by the gene coordinates plus any `--upstream` or `--downstream` extension.
-    2.  **Sliding Windows**: Windows of size `--size` move across this region with a step of `--step`.
-    3.  **Calculation**: Metrics are computed for each window based on sample groups provided in `-g`.
-- **Required Arguments**:
-    - `-g, --group`: CSV file defining sample populations (Columns: Sample, Group).
-    - `-w, --size`: Window size in bp (e.g., `1000`).
-    - `-s, --step`: Step size in bp (e.g., `100`).
-
-**Example: Selection Sweep Analysis**
-Calculate $F_{ST}$ for a gene and its surrounding region (extended 1MB upstream and downstream) using a sliding window approach (Reference: [Nature Genetics, 2020](https://www.nature.com/articles/s41588-020-0604-7)):
-```bash
-hastat view -v data.vcf.gz -a ann.gff3 -i GeneID \
-    -t fst -g sample_groups.csv \
-    -u 1000000 -d 1000000 --size 10000 --step 10000 -o output_prefix
-```
-
-### 2. Statistics Module (`hastat stat`)
-Perform statistical tests to associate haplotypes with phenotypes.
-- **Input**: Haplotype groups (from `view -t group`) and Phenotype data (`-p`).
-- **Method**: ANOVA followed by multiple comparisons (`TukeyHSD` or `AllPairTest`).
-
-```bash
-hastat stat -g hap_groups.csv -p traits.csv -a GeneID -o stat_results.csv
-```
-
-### 3. Visualization (`hastat plot`)
-Generate high-quality visualizations for your data.
-
-#### Common Plot Types
-- **`bar` / `pie`**: Visualize haplotype frequencies in different populations.
-- **`box`**: Compare phenotypic values among haplotypes or populations.
-    - Supports significance testing (t-test, U-test).
-    - Use `--comparisons` to specify pairs for testing.
-
-#### Gene Structure & Tracks (`hastat plot gene`)
-Visualize the gene model along with haplotype variations and statistical tracks ($\pi$, $F_{ST}$).
-- **Configuration**: Uses a TOML file to control layout, colors, and tracks.
-- **Features**:
-    - Plot CDS/Exon structure.
-    - Align haplotype variations to the gene.
-    - Display sliding window tracks for selection signatures.
-
-**Example: Plotting Gene with Tracks**
-```bash
-hastat plot gene --gff ann.gff3 --genes GeneID --toml config.toml \
-    --upstream 2000 --downstream 1000 -o gene_plot.pdf
-```
-
-### 4. Network Analysis (`hastat network`)
-Construct and visualize haplotype networks (Minimum Spanning Tree/Network).
-1.  **Generate Table**: `hastat view -t table ...`
-2.  **Build Network**: `hastat network -t table.csv -o network.txt`
-3.  **Visualize**: `hastat plot network --file network.txt ...`
 
 ## 💡 Advanced Examples
 
