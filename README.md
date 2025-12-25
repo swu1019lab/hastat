@@ -48,7 +48,7 @@
 ### ⚠️ Limitations
 `hastat` is specialized for gene-centric haplotype analysis and visualization. It is **NOT** designed for:
 - **Raw Data Processing**: It does not handle FASTQ/BAM files or perform variant calling.
-- **Whole-Genome Operations**: For filtering or merging massive whole-genome VCFs, use `bcftools` or `vcftools`.
+- **Whole-Genome Operations**: For filtering or merging VCFs, use `bcftools` or `vcftools`.
 - **Complex Pedigrees**: It focuses on natural populations, not family-based linkage analysis.
 
 ## 📦 Installation
