@@ -47,7 +47,7 @@ python --version
 ```
 
 ### 2. Download Source Code
-Clone the repository from GitHub to your local machine:
+Clone the repository from GitHub to your local machine. **Important: You must enter the `hastat` directory before installation.**
 ```bash
 git clone https://github.com/swu1019lab/hastat.git
 cd hastat
@@ -61,7 +61,7 @@ You can install `hastat` using either the modern `build` system (recommended) or
 #### Option A: Using `build` (Recommended)
 This method builds a standard distribution package and installs it.
 
-1.  **Install the build tool**:
+1.  **Install the build tool** (skip if already installed):
     ```bash
     pip install build --user -i https://pypi.tuna.tsinghua.edu.cn/simple
     ```
@@ -92,11 +92,120 @@ To verify the installation, run:
 hastat --help
 ```
 
-## 🚀 Usage Guide
+## 🚀 Usage
 
 The general syntax for `hastat` is:
 ```bash
 hastat <subcommand> [options]
+```
+
+Here is a step-by-step guide based on a typical workflow:
+
+### Step 1: Generate Haplotype Table
+Extract haplotypes for a specific gene from a VCF file.
+```bash
+hastat view \
+    -t table \
+    -v data.vcf.gz \
+    -a annotation.gff3 \
+    -i GeneID \
+    -u 2000 \
+    -o results/GeneID.table
+```
+
+### Step 2: Group Samples by Haplotype
+Group samples based on their haplotypes.
+```bash
+hastat view \
+    -t group \
+    -v data.vcf.gz \
+    -a annotation.gff3 \
+    -i GeneID \
+    -u 2000 \
+    -o results/GeneID.group
+```
+
+### Step 3: Statistical Analysis
+Perform statistical tests to associate haplotypes with phenotypes.
+```bash
+hastat stat \
+    -g results/GeneID.group.csv \
+    -p phenotype.csv \
+    -a GeneID \
+    -o results/GeneID.stat.csv
+```
+
+### Step 4: Visualization
+
+#### Haplotype Frequency (Pie Chart)
+```bash
+hastat plot pie \
+    --sample_hap results/GeneID.group.csv \
+    --sample_group sample_groups.csv \
+    -o results/GeneID.pie.pdf
+```
+
+#### Phenotype Distribution (Box Plot)
+```bash
+hastat plot box \
+    --sample_hap results/GeneID.group.csv \
+    --sample_phe phenotype.csv \
+    --phe_index 1 \
+    -o results/GeneID.box.pdf
+```
+
+#### Haplotype Network
+```bash
+# 1. Generate network file
+hastat network -t results/GeneID.table.csv -o results/GeneID.network.txt
+
+# 2. Plot network
+hastat plot network \
+    --file results/GeneID.network.txt \
+    --sample_hap results/GeneID.group.csv \
+    --sample_group sample_groups.csv \
+    -o results/GeneID.network.pdf
+```
+
+#### Gene Structure and Selection Signals
+Visualize gene structure along with $\pi$ and $F_{ST}$ tracks.
+```bash
+hastat plot gene \
+    --gff annotation.gff3 \
+    --genes GeneID \
+    --toml gene.toml \
+    -o results/GeneID.gene.pdf \
+    --upstream 2000
+```
+
+### Step 5: Selection Sweep Analysis
+Calculate $F_{ST}$ and $\pi$ using a sliding window approach.
+```bash
+# Calculate Fst
+hastat view \
+    -t fst \
+    -v data.vcf.gz \
+    -a annotation.gff3 \
+    -i GeneID \
+    -u 1000000 \
+    -d 1000000 \
+    -g sample_groups.csv \
+    -o results/GeneID.fst \
+    --size 10000 \
+    --step 1000
+
+# Calculate Pi
+hastat view \
+    -t pi \
+    -v data.vcf.gz \
+    -a annotation.gff3 \
+    -i GeneID \
+    -u 1000000 \
+    -d 1000000 \
+    -g sample_groups.csv \
+    -o results/GeneID.pi \
+    --size 10000 \
+    --step 1000
 ```
 
 ### 1. View Module (`hastat view`)
@@ -140,11 +249,11 @@ You can extend the analysis scope beyond the gene body, which is crucial for ana
     - `-s, --step`: Step size in bp (e.g., `100`).
 
 **Example: Selection Sweep Analysis**
-Calculate $F_{ST}$ for a gene and its 2kb upstream promoter, using 1kb windows sliding every 100bp:
+Calculate $F_{ST}$ for a gene and its surrounding region (extended 1MB upstream and downstream) using a sliding window approach (Reference: [Nature Genetics, 2020](https://www.nature.com/articles/s41588-020-0604-7)):
 ```bash
 hastat view -v data.vcf.gz -a ann.gff3 -i GeneID \
     -t fst -g sample_groups.csv \
-    -u 2000 --size 1000 --step 100 -o output_prefix
+    -u 1000000 -d 1000000 --size 10000 --step 10000 -o output_prefix
 ```
 
 ### 2. Statistics Module (`hastat stat`)
