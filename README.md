@@ -23,7 +23,7 @@
 ### Core Modules
 | Module | Description |
 |:---|:---|
-| 🧬 **`view`** | Extract and analyze genotype, haplotype, $\pi$, $F_{ST}$, and LD data from VCF files. |
+| 🧬 **`view`** | Extract and analyze genotype, haplotype, $\pi$, $F_{ST}$, Tajima's D, and LD data from VCF files. |
 | 📊 **`stat`** | Perform robust statistical analysis (ANOVA, multiple comparisons) linking haplotypes to phenotypes. |
 | 🎨 **`plot`** | Generate high-quality visualizations: Bar, Pie, Box, Network, and Gene haplotype plots. |
 | 🕸️ **`network`** | Construct haplotype networks using Minimum Spanning Tree (MST) and Minimum Spanning Network (MSN). |
@@ -31,7 +31,7 @@
 
 ### Advanced Capabilities
 - ✅ **Multi-population Analysis**: Compare haplotype frequencies and diversity across different groups.
-- ✅ **Selection Sweeps**: Detect signatures of selection using nucleotide diversity ($\pi$) and fixation index ($F_{ST}$).
+- ✅ **Selection Sweeps**: Detect signatures of selection using nucleotide diversity ($\pi$), fixation index ($F_{ST}$), and Tajima's D.
 - ✅ **Homologous Genes**: Analyze multiple homologous genes simultaneously.
 - ✅ **Customization**: Flexible grouping, filtering (heterozygosity), and statistical methods.
 
@@ -144,9 +144,17 @@ You can extend the analysis scope beyond the gene body, which is crucial for ana
 | `compare` | **Multi-Population Mode**: Compare haplotypes across multiple VCF files. |
 | `pi` | Calculate Nucleotide Diversity ($\pi$). |
 | `fst` | Calculate Fixation Index ($F_{ST}$). |
+| `tajima_d` | Calculate Tajima's D. |
 
-#### 📊 Population Genetics ($\pi$ & $F_{ST}$)
-`hastat` calculates $\pi$ and $F_{ST}$ using a **sliding window** approach.
+#### 📊 Population Genetics ($\pi$, $F_{ST}$ & Tajima's D)
+`hastat` calculates $\pi$, $F_{ST}$ and Tajima's D using a **sliding window** approach.
+
+- **Nucleotide Diversity ($\pi$)**: Measures the average number of nucleotide differences per site between two randomly chosen sequences in a population. It reflects the genetic diversity within a population. High $\pi$ indicates high genetic diversity.
+- **Fixation Index ($F_{ST}$)**: Measures the degree of genetic differentiation between subpopulations. It ranges from 0 to 1, where 0 implies no differentiation (random mating) and 1 implies complete differentiation (fixed differences).
+- **Tajima's D**: A test of neutrality. It compares two measures of nucleotide diversity ($\pi$ and $\theta_W$).
+    - $D \approx 0$: Neutral evolution.
+    - $D > 0$: Balancing selection or sudden population contraction.
+    - $D < 0$: Positive selection (selective sweep) or population expansion.
 
 - **Method**:
     1.  **Region Definition**: The total analysis region is determined by the gene coordinates plus any `--upstream` or `--downstream` extension.
