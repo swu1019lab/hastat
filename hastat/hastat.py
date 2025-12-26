@@ -32,13 +32,15 @@ def main():
                                  help='The region of the gene to be analyzed, format: chr:start-end')
     exclusive_group.add_argument('-i', '--gene_id', type=str,
                                  help='The gene ID for the target region, which should be provided with the GFF file')
+    exclusive_group.add_argument('-l', '--list', type=str,
+                                 help='A file containing a list of gene IDs to be analyzed, one per line')
     exclusive_group.add_argument('--homo', type=str,
                                  help='Multiple homologous gene IDs separated by comma, e.g., gene1,gene2,gene3')
     parser_view.add_argument('-u', '--upstream', type=int, default=0,
                              help='The upstream distance of the gene (default: 0)')
     parser_view.add_argument('-d', '--downstream', type=int, default=0,
                              help='The downstream distance of the gene (default: 0)')
-    parser_view.add_argument('-t', '--type', type=str, choices=['geno', 'table', 'group', 'freq', 'pi', 'fst', 'compare'],
+    parser_view.add_argument('-t', '--type', type=str, choices=['geno', 'table', 'group', 'freq', 'pi', 'fst', 'tajima_d', 'compare'],
                              default='group', help='The data type to be analyzed (default: %(default)s)')
     parser_view.add_argument('-g', '--group', type=str,
                              help='A csv file containing the custom population groups of samples with two columns: sample name and group information')
@@ -51,6 +53,10 @@ def main():
                             help='Population names for compare analysis (must match the number of VCF files)')
     parser_view.add_argument('--het', type=float, default=None,
                             help='Heterozygosity rate threshold for filtering variants. Variants with heterozygosity rate greater than this value will be filtered out. 0=only homozygous sites, 1=only heterozygous sites (default: no filtering)')
+    parser_view.add_argument('--maf', type=float, default=0.0,
+                            help='Minimum Minor Allele Frequency threshold. Variants with MAF less than this value will be filtered out (default: %(default)s)')
+    parser_view.add_argument('--max_missing', type=float, default=1.0,
+                            help='Maximum missing rate threshold. Variants with missing rate greater than this value will be filtered out (default: %(default)s)')
 
     # stat command
     parser_stat = subparsers.add_parser('stat', help='Perform gene haplotype statistical test for related-traits')

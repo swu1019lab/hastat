@@ -124,7 +124,7 @@ class GeneVariant(object):
         """
         self.vcf_in = vcf_in
 
-    def hap_table(self, chrom_name, chrom_start, chrom_end, het_threshold=None):
+    def hap_table(self, chrom_name, chrom_start, chrom_end, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Get haplotypes table of a gene region
 
@@ -132,11 +132,13 @@ class GeneVariant(object):
         :param chrom_start: chromosome start position
         :param chrom_end: chromosome end position
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained haplotypes table
         """
         logger.info("Initializing the GeneVariant object")
 
-        df = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold)
+        df = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
         # get unique haplotypes and their counts
         hap, counts = np.unique(df.T.values, axis=0, return_counts=True)
 
@@ -160,17 +162,19 @@ class GeneVariant(object):
         # hap_table.columns = hap_table.columns.droplevel(['ref', 'alt'])
         return hap_table
 
-    def multi_loci_hap_table(self, loci, het_threshold=None):
+    def multi_loci_hap_table(self, loci, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Get haplotypes table from multiple regions (for homologous genes)
 
         :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained haplotypes table
         """
         logger.info(f"Processing haplotype table for {len(loci)} regions")
         
-        df = self.get_multi_loci_geno_data(loci, het_threshold=het_threshold)
+        df = self.get_multi_loci_geno_data(loci, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
         # get unique haplotypes and their counts
         hap, counts = np.unique(df.T.values, axis=0, return_counts=True)
 
@@ -186,7 +190,7 @@ class GeneVariant(object):
         
         return hap_table
 
-    def hap_groups(self, chrom_name, chrom_start, chrom_end, het_threshold=None):
+    def hap_groups(self, chrom_name, chrom_start, chrom_end, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Get haplotypes group of a gene region
 
@@ -194,11 +198,13 @@ class GeneVariant(object):
         :param chrom_start: chromosome start position
         :param chrom_end: chromosome end position
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained haplotypes group
         """
         logger.info("Initializing the GeneVariant object")
 
-        df = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold)
+        df = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
         # get unique haplotypes, their counts and sample indices
         _, indices, counts = np.unique(df.T.values, axis=0, return_inverse=True, return_counts=True)
 
@@ -220,17 +226,19 @@ class GeneVariant(object):
         hap_groups.name = 'haplotypes'
         return hap_groups.reset_index()
 
-    def multi_loci_hap_groups(self, loci, het_threshold=None):
+    def multi_loci_hap_groups(self, loci, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Get haplotypes group from multiple regions (for homologous genes)
 
         :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained haplotypes group
         """
         logger.info(f"Processing haplotype groups for {len(loci)} regions")
         
-        df = self.get_multi_loci_geno_data(loci, het_threshold=het_threshold)
+        df = self.get_multi_loci_geno_data(loci, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
         # get unique haplotypes, their counts and sample indices
         _, indices, counts = np.unique(df.T.values, axis=0, return_inverse=True, return_counts=True)
 
@@ -251,7 +259,7 @@ class GeneVariant(object):
         hap_groups.name = 'haplotypes'
         return hap_groups.reset_index()
 
-    def calc_hap_freq(self, chrom_name, chrom_start, chrom_end, sample_groups=None, het_threshold=None):
+    def calc_hap_freq(self, chrom_name, chrom_start, chrom_end, sample_groups=None, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Calculate haplotypes frequency of a gene region
 
@@ -260,32 +268,45 @@ class GeneVariant(object):
         :param chrom_end: chromosome end position
         :param sample_groups: A sample group Dataframe with two columns only: samples and groups
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained haplotypes frequency
         """
-        hap_groups = self.hap_groups(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold)
+        hap_groups = self.hap_groups(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
         if sample_groups is not None:
             return hap_groups.merge(sample_groups, how='inner', on='samples').groupby(
                 ['haplotypes', 'groups']).count().unstack(fill_value=0)
         else:
             return hap_groups.groupby('haplotypes').count()
 
-    def calc_multi_loci_hap_freq(self, loci, sample_groups=None, het_threshold=None):
+    def calc_multi_loci_hap_freq(self, loci, sample_groups=None, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Calculate haplotypes frequency from multiple regions (for homologous genes)
 
         :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
         :param sample_groups: A sample group Dataframe with two columns only: samples and groups
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained haplotypes frequency
         """
-        hap_groups = self.multi_loci_hap_groups(loci, het_threshold=het_threshold)
-        if sample_groups is not None:
-            return hap_groups.merge(sample_groups, how='inner', on='samples').groupby(
-                ['haplotypes', 'groups']).count().unstack(fill_value=0)
-        else:
-            return hap_groups.groupby('haplotypes').count()
+        hap_groups = self.multi_loci_hap_groups(loci, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
+        # get unique haplotypes and their counts
+        hap, counts = np.unique(hap_groups.T.values, axis=0, return_counts=True)
 
-    def get_geno_data(self, chrom_name, chrom_start, chrom_end, code='code1', het_threshold=None):
+        # Sort haplotypes by sample count (descending order)
+        # Hap1 should have the most samples, HapN should have the least
+        sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
+        hap_sorted = hap[sorted_indices]
+
+        # haplotypes frequency table, including name, genotype code and size
+        hap_freq_table = pd.DataFrame(hap_sorted, columns=hap_groups.index)
+        hap_freq_table.index = "Hap" + (hap_freq_table.index + 1).astype(str)
+        hap_freq_table = hap_freq_table.T.reset_index()
+
+        return hap_freq_table
+
+    def get_geno_data(self, chrom_name, chrom_start, chrom_end, code='code1', het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Get genotype data within a gene region
 
@@ -295,6 +316,8 @@ class GeneVariant(object):
         :param code: genotype code, code1 or code2, default code1, code1 is presented as 0/1/2,
                      code2 is presented as [0, 0], [0, 1] and [1, 1]
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained genotype data
         """
         allele_data_set = {'code1': defaultdict(list), 'code2': defaultdict(list)}
@@ -324,6 +347,25 @@ class GeneVariant(object):
                 # Missing genotypes are represented by -1
                 geno_code1 = [sum(s.allele_indices) if isinstance(s.allele_indices[0], int) else -1 for s in
                               rec.samples.values()]
+                
+                # Filter by MAF and missing rate
+                valid_genotypes = [g for g in geno_code1 if g != -1]
+                missing_count = len(geno_code1) - len(valid_genotypes)
+                missing_rate = missing_count / len(geno_code1)
+                
+                if missing_rate > max_missing_threshold:
+                    continue
+                    
+                if len(valid_genotypes) > 0:
+                    ac = sum(valid_genotypes)
+                    an = 2 * len(valid_genotypes)
+                    af = ac / an
+                    maf = min(af, 1 - af)
+                    if maf < maf_threshold:
+                        continue
+                elif maf_threshold > 0:
+                    continue
+
                 allele_data_set['code1']['index'].append((rec.chrom, rec.pos, rec.ref, rec.alts[0]))
                 allele_data_set['code1']['data'].append(geno_code1)
                 # genotype code was represented by paired number, e.g., [0, 0], [0, 1] and [1, 1]
@@ -354,13 +396,15 @@ class GeneVariant(object):
         
         return geno_data
 
-    def get_multi_loci_geno_data(self, loci, code='code1', het_threshold=None):
+    def get_multi_loci_geno_data(self, loci, code='code1', het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
         Get genotype data from multiple regions (for homologous genes)
 
         :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
         :param code: genotype code, code1 or code2, default code1
         :param het_threshold: heterozygosity rate threshold for filtering variants
+        :param maf_threshold: Minimum Minor Allele Frequency threshold
+        :param max_missing_threshold: Maximum missing rate threshold
         :return: a DataFrame contained genotype data from all regions
         """
         logger.info(f"Extracting genotype data from {len(loci)} regions")
@@ -368,11 +412,8 @@ class GeneVariant(object):
         all_data = []
         for chrom_name, chrom_start, chrom_end in loci:
             logger.info(f"Processing region: {chrom_name}:{chrom_start}-{chrom_end}")
-            region_data = self.get_geno_data(chrom_name, chrom_start, chrom_end, code)
+            region_data = self.get_geno_data(chrom_name, chrom_start, chrom_end, code, het_threshold, maf_threshold, max_missing_threshold)
             if not region_data.empty:
-                # Apply heterozygosity filtering if threshold is provided
-                if het_threshold is not None and code == 'code1':
-                    region_data = self.filter_by_heterozygosity(region_data, het_threshold)
                 all_data.append(region_data)
         
         if not all_data:
@@ -407,7 +448,7 @@ class GeneVariant(object):
         h = allel.HaplotypeArray(data)
         ac = h.count_alleles()
         pos = geno_data.index.get_level_values('pos').to_list()
-        pi, windows, n_bases, counts = allel.windowed_diversity(pos, ac, size, step=step)
+        pi, windows, n_bases, counts = allel.windowed_diversity(pos, ac, size, step=step, start=chrom_start, stop=chrom_end)
         return np.column_stack([[chrom_name] * len(windows), windows, n_bases, counts, pi])
 
     def get_multi_loci_pi_data(self, loci, size=1, step=1, sample_list=None, het_threshold=None):
@@ -462,7 +503,7 @@ class GeneVariant(object):
         g = allel.GenotypeArray(geno_data.to_numpy().tolist())
         _ = np.seterr(divide='ignore')
         # fst: shape (n_windows,), windows: shape (n_windows, 2), counts: shape (n_windows,)
-        fst, windows, counts = allel.windowed_weir_cockerham_fst(pos, g, sub_pops, size, step=step)
+        fst, windows, counts = allel.windowed_weir_cockerham_fst(pos, g, sub_pops, size, step=step, start=chrom_start, stop=chrom_end)
         return np.column_stack([[chrom_name] * len(windows), windows, counts, fst])
 
     def get_multi_loci_fst_data(self, loci, sample_list1: list, sample_list2: list, size=1, step=1, het_threshold=None):
@@ -489,6 +530,56 @@ class GeneVariant(object):
             return np.array([])
         
         return np.vstack(all_fst_data)
+
+    def get_tajima_d_data(self, chrom_name, chrom_start, chrom_end, size=1, step=1, sample_list=None, het_threshold=None):
+        """
+        Get Tajima's D data of target samples using sliding window method
+
+        :param chrom_name: chromosome name
+        :param chrom_start: chromosome start position
+        :param chrom_end: chromosome end position
+        :param size: window size
+        :param step: step size
+        :param sample_list: a list contained sample names
+        :param het_threshold: heterozygosity rate threshold for filtering variants
+        :return: a numpy array contained Tajima's D data
+        """
+        logger.info(f"Calculating Tajima's D data of {len(sample_list) if sample_list else 'all'} samples using sliding window method")
+        geno_data = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold)
+        if sample_list is not None:
+            data = geno_data.loc[:, geno_data.columns.isin(sample_list)].to_numpy()
+        else:
+            data = geno_data.to_numpy()
+        h = allel.HaplotypeArray(data)
+        ac = h.count_alleles()
+        pos = geno_data.index.get_level_values('pos').to_list()
+        # Use chrom_start and chrom_end to define window boundaries
+        tajima_d, windows, counts = allel.windowed_tajima_d(pos, ac, size, step=step, start=chrom_start, stop=chrom_end)
+        return np.column_stack([[chrom_name] * len(windows), windows, counts, tajima_d])
+
+    def get_multi_loci_tajima_d_data(self, loci, size=1, step=1, sample_list=None, het_threshold=None):
+        """
+        Get Tajima's D data from multiple regions (for homologous genes)
+
+        :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
+        :param size: window size
+        :param step: step size
+        :param sample_list: a list contained sample names
+        :param het_threshold: heterozygosity rate threshold for filtering variants
+        :return: a numpy array contained Tajima's D data
+        """
+        logger.info(f"Calculating Tajima's D data from {len(loci)} regions")
+        
+        all_tajima_d_data = []
+        for chrom_name, chrom_start, chrom_end in loci:
+            tajima_d_data = self.get_tajima_d_data(chrom_name, chrom_start, chrom_end, size, step, sample_list, het_threshold)
+            if tajima_d_data.size > 0:
+                all_tajima_d_data.append(tajima_d_data)
+        
+        if not all_tajima_d_data:
+            return np.array([])
+        
+        return np.vstack(all_tajima_d_data)
 
     def get_ld_data(self, chrom_name, chrom_start, chrom_end):
         """
@@ -1092,4 +1183,4 @@ class GeneHapNetwork:
         else:
             raise ValueError(f"Unsupported format: {format}. Supported formats: gexf, gml, edgelist, csv")
         
-        logger.info(f"Network saved successfully with {self.network.number_of_nodes()} nodes and {self.network.number_of_edges()} edges") 
+        logger.info(f"Network saved successfully with {self.network.number_of_nodes()} nodes and {self.network.number_of_edges()} edges")
