@@ -11,6 +11,8 @@ import matplotlib.patches as patches
 import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 import tomli
+from scipy.cluster import hierarchy
+from scipy.spatial import distance
 from hastat.log.logger import logger
 from hastat.dataio.gff import read as read_gff
 from hastat.utils.gene import GeneFeature
@@ -273,7 +275,8 @@ class FancyGene(object):
                 xy=(abs_x + abs_width/2, abs_y + abs_height/2),
                 xytext=(0, 5),
                 textcoords='offset points',
-                ha='center', va='bottom', fontsize=gene_label_size, weight='bold'
+                ha='center', va='bottom', fontsize=gene_label_size, weight='bold',
+                zorder=10
             )
 
         return abs_x, abs_y, abs_width, abs_height
@@ -441,9 +444,71 @@ class FancyGene(object):
         hap_group_bar_x = gene_config.get('hap_group_bar_x', -0.12)
         hap_group_bar_width = gene_config.get('hap_group_bar_width', 0.02)
         
+        # Clustering config
+        hap_cluster_show = gene_config.get('hap_cluster_show', False)
+        hap_cluster_linkage = gene_config.get('hap_cluster_linkage', 'ward')
+        hap_cluster_width = gene_config.get('hap_cluster_width', 0.1)
+        
         hap_data = self._load_haplotype_data(hap_file, hap_cols)
         if hap_data is None:
             return
+
+        # Filter haplotypes and variants
+        hap_het_rate = gene_config.get('hap_het_rate', [0, 1])
+        hap_mis_rate = gene_config.get('hap_mis_rate', [0, 1])
+        var_het_rate = gene_config.get('var_het_rate', [0, 1])
+        var_mis_rate = gene_config.get('var_mis_rate', [0, 1])
+
+        # 1. Filter haplotypes (columns)
+        meta_cols = ['chrom', 'pos', 'ref', 'alt']
+        current_hap_cols = [c for c in hap_data.columns if c not in meta_cols]
+        
+        valid_haps = []
+        for hap in current_hap_cols:
+            series = hap_data[hap]
+            n_total = len(series)
+            n_miss = (series == -1).sum()
+            n_called = n_total - n_miss
+            
+            mis_rate = n_miss / n_total if n_total > 0 else 0
+            het_rate = (series == 1).sum() / n_called if n_called > 0 else 0
+            
+            if (hap_mis_rate[0] <= mis_rate <= hap_mis_rate[1]) and \
+               (hap_het_rate[0] <= het_rate <= hap_het_rate[1]):
+                valid_haps.append(hap)
+        
+        if not valid_haps:
+            logger.warning("No haplotypes left after filtering!")
+            return
+
+        hap_data = hap_data[meta_cols + valid_haps]
+        current_hap_cols = valid_haps
+
+        # 2. Filter variants (rows)
+        haps_df = hap_data[current_hap_cols]
+        n_haps = len(current_hap_cols)
+        
+        if n_haps > 0:
+            n_miss_per_site = (haps_df == -1).sum(axis=1)
+            n_called_per_site = n_haps - n_miss_per_site
+            
+            mis_rate_per_site = n_miss_per_site / n_haps
+            
+            het_counts = (haps_df == 1).sum(axis=1)
+            het_rate_per_site = pd.Series(0.0, index=hap_data.index)
+            mask_called = n_called_per_site > 0
+            het_rate_per_site[mask_called] = het_counts[mask_called] / n_called_per_site[mask_called]
+            
+            mask_keep = (mis_rate_per_site >= var_mis_rate[0]) & (mis_rate_per_site <= var_mis_rate[1]) & \
+                        (het_rate_per_site >= var_het_rate[0]) & (het_rate_per_site <= var_het_rate[1])
+            
+            hap_data = hap_data[mask_keep]
+            
+            if hap_data.empty:
+                logger.warning("No variants left after filtering!")
+                return
+            
+            logger.info(f"After filtering: {len(hap_data.columns) - 4} haplotypes, {len(hap_data)} sites")
         
         x_start, y_start, bbox_width, bbox_height = bbox
         
@@ -482,18 +547,47 @@ class FancyGene(object):
                 group_info[row['haplotype']] = str(row['group'])
         
         # Sort haplotypes
-        if group_info:
-            # Filter haplotypes that are in group_info
-            hap_cols = [hap for hap in hap_cols if hap in group_info]
-            
-            if not hap_cols:
-                logger.warning("No haplotypes found in group file!")
-                return
+        if not hap_cluster_show:
+            if group_info:
+                # Filter haplotypes that are in group_info
+                hap_cols = [hap for hap in hap_cols if hap in group_info]
+                
+                if not hap_cols:
+                    logger.warning("No haplotypes found in group file!")
+                    return
 
-            # Sort by group then by haplotype name
-            hap_cols.sort(key=lambda x: (group_info[x], x))
+                # Sort by group then by haplotype name
+                hap_cols.sort(key=lambda x: (group_info[x], x))
+            else:
+                hap_cols.sort()
         else:
-            hap_cols.sort()
+            if group_info:
+                hap_cols = [hap for hap in hap_cols if hap in group_info]
+
+        # Sort gene_hap by position to ensure consistent column order
+        gene_hap_sorted = gene_hap.sort_values('pos')
+
+        # Perform clustering if enabled
+        Z = None
+        if hap_cluster_show and len(hap_cols) > 2:
+            X = gene_hap_sorted[hap_cols].T.values
+            try:
+                # Calculate Hamming distance
+                dist_matrix = distance.pdist(X, metric='hamming')
+                
+                # Perform hierarchical clustering
+                Z = hierarchy.linkage(dist_matrix, method=hap_cluster_linkage)
+                
+                # Get ordered leaves
+                dendro = hierarchy.dendrogram(Z, no_plot=True)
+                leaves = dendro['leaves']
+                
+                # Reorder hap_cols
+                hap_cols = [hap_cols[i] for i in leaves]
+                
+            except Exception as e:
+                logger.warning(f"Clustering failed: {e}")
+                Z = None
 
         # Calculate layout
         num_freq_tracks = 0
@@ -520,9 +614,6 @@ class FancyGene(object):
         
         # Draw haplotype matrix with equal spacing
         colors = {0: 'white', 1: '#90CAEE', 2: '#114F8B', -1: 'lightgray'}
-        
-        # Sort gene_hap by position to ensure consistent column order
-        gene_hap_sorted = gene_hap.sort_values('pos')
         
         # Determine edge properties based on number of haplotypes
         edge_color = 'black' if num_haps <= 10 else None
@@ -554,11 +645,20 @@ class FancyGene(object):
             colors = group_cmap(np.linspace(0, 1, len(unique_groups)))
             group_colors = {grp: colors[i] for i, grp in enumerate(unique_groups)}
 
-            current_group = None
-            group_start_idx = 0
-            
             for i, hap in enumerate(hap_cols):
                 grp = group_info[hap]
+                color = group_colors[grp]
+                
+                # Draw group color block for this row
+                rect_x = hap_abs_x + hap_group_bar_x
+                rect_y = hap_abs_y + i * cell_height
+                
+                rect = patches.Rectangle(
+                    (rect_x, rect_y),
+                    hap_group_bar_width, cell_height,
+                    facecolor=color, edgecolor=None, linewidth=0
+                )
+                self.ax.add_patch(rect)
                 
                 # Draw hap label
                 if hap_label_show:
@@ -567,22 +667,6 @@ class FancyGene(object):
                         hap_abs_x - 0.02, label_y,
                         hap, ha='right', va='center', fontsize=hap_label_size
                     )
-                
-                # Check for group change or end
-                if grp != current_group:
-                    if current_group is not None:
-                        # Draw previous group bar
-                        self._draw_group_bar(current_group, group_start_idx, i - 1, 
-                                           hap_abs_x, hap_abs_y, cell_height, group_colors[current_group],
-                                           hap_group_bar_x, hap_group_bar_width)
-                    current_group = grp
-                    group_start_idx = i
-                
-                if i == len(hap_cols) - 1:
-                    # Draw last group bar
-                    self._draw_group_bar(current_group, group_start_idx, i, 
-                                       hap_abs_x, hap_abs_y, cell_height, group_colors[current_group],
-                                       hap_group_bar_x, hap_group_bar_width)
         else:
             # Add haplotype labels on the left
             if hap_label_show:
@@ -593,6 +677,31 @@ class FancyGene(object):
                         hap_col, ha='right', va='center', fontsize=hap_label_size
                     )
         
+        # Draw dendrograms
+        if hap_cluster_show and Z is not None:
+            # Determine dendrogram position
+            dendro_x_end = hap_abs_x + hap_group_bar_x - 0.02 if group_info else hap_abs_x - 0.05
+            dendro_width = hap_cluster_width
+            
+            dendro = hierarchy.dendrogram(Z, no_plot=True)
+            icoord = np.array(dendro['icoord'])
+            dcoord = np.array(dendro['dcoord'])
+            
+            # Map icoord (leaves) to y
+            # scipy dendrogram leaves are at 5, 15, 25...
+            # We map them to the center of our rows
+            # normalized_y = (y - 5) / 10  -> 0, 1, 2...
+            
+            y_coords = hap_abs_y + ((icoord - 5)/10) * cell_height + cell_height/2
+            
+            # Map dcoord to x
+            max_d = np.max(dcoord) if np.max(dcoord) > 0 else 1
+            x_coords = dendro_x_end - (dcoord / max_d) * dendro_width
+            
+            # Plot lines
+            for xs, ys in zip(x_coords, y_coords):
+                self.ax.plot(xs, ys, color='black', linewidth=0.5)
+
         # Draw frequency tracks
         if hap_freq_show:
             abs_freq_height = hap_freq_height * bbox_height
