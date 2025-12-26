@@ -37,13 +37,15 @@
 
 ### Comparison with Other Tools
 | Feature | hastat | plink | vcftools | bcftools |
-| :--- | :---: | :---: | :---: | :---: |
-| **Focus** | Gene Haplotypes | GWAS/Association | VCF Manipulation | VCF Manipulation |
-| **Haplotype Visualization** | ✅ (Rich) | ❌ | ❌ | ❌ |
-| **Haplotype Network** | ✅ | ❌ | ❌ | ❌ |
-| **Phenotype Association** | ✅ (ANOVA/Tukey) | ✅ (GLM/LMM) | ❌ | ❌ |
-| **Selection Signals ($\pi$/$F_{ST}$)** | ✅ (Visualization included) | ❌ | ✅ (Calc only) | ❌ |
-| **Homologous Gene Support** | ✅ | ❌ | ❌ | ❌ |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tool Positioning** | Gene-centric Haplotype Analysis | GWAS and Population Association | VCF Manipulation and Statistics | VCF Manipulation and Variant Calling |
+| **Primary Input** | VCF files | VCF, PED/MAP, BED/BIM/FAM files | VCF, BCF files | VCF, BCF files |
+| **Major Functions** | Haplotype analysis, association with phenotype, visualizations and network construction | Association testing, LD, Filtering | Filtering, Calc Pi/Fst | Filtering, Merging, Calling |
+| **Haplotype Visuals** | Built-in (Hap plots, Networks) | No native support | No native support | No native support |
+| **Applicable Species** | Plants and Animals | Plants and Animals | Plants and Animals | Plants and Animals |
+| **Target Population** | Natural Populations | Natural Populations and Pedigrees | Natural Populations | Natural Populations |
+| **Installation Method** | Python (pip / build) | Binary executable or C++ Source | C++ Source / Package Manager | C Source / Package Manager |
+
 
 ### ⚠️ Limitations
 `hastat` is specialized for gene-centric haplotype analysis and visualization. It is **NOT** designed for:
