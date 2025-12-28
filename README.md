@@ -59,6 +59,8 @@
 ## 📦 Installation
 
 ### 1. Prerequisites
+> **⚠️ Windows Compatibility**: Since `pysam` is not available for Windows, `hastat` **cannot** be installed directly on Windows. Windows users are highly recommended to use **WSL (Windows Subsystem for Linux)**.
+
 - **Python 3.9+**
 - **Dependencies**: `pandas`, `numpy`, `scipy`, `statsmodels`, `scikit-allel`, `gffutils`, `pysam`, `matplotlib`, `tomli`, `prettytable`, `networkx`
 
@@ -106,7 +108,6 @@ python setup.py install --user
 When using the `--user` flag (recommended to avoid permission issues):
 - **Linux/macOS**: The executable `hastat` is typically placed in `~/.local/bin`.
   - *Note: You may need to add this path to your `$PATH` environment variable if `hastat` command is not found.*
-- **Windows**: It is placed in your user's Python Scripts directory, e.g., `C:\Users\YourName\AppData\Roaming\Python\Python39\Scripts`.
 
 To verify the installation, run:
 ```bash
