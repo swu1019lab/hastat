@@ -31,9 +31,9 @@
 
 ### Advanced Capabilities
 - ✅ **Multi-population Analysis**: Compare haplotype frequencies and diversity across different groups.
-- ✅ **Selection Sweeps**: Detect signatures of selection using nucleotide diversity ($\pi$), fixation index ($F_{ST}$), and Tajima's D.
-- ✅ **Homologous Genes**: Analyze multiple homologous genes simultaneously.
-- ✅ **Customization**: Flexible grouping, filtering (heterozygosity), and statistical methods.
+- ✅ **Selection Signals Scan**: Detect signatures of selection using nucleotide diversity ($\pi$), fixation index ($F_{ST}$), and Tajima's D.
+- ✅ **Homologous Genes Analysis**: Analyze multiple homologous genes simultaneously.
+- ✅ **Customization parameters**: Flexible grouping, filtering (heterozygosity), and statistical methods.
 
 ### Comparison with Other Tools
 | Feature | hastat | plink | vcftools | bcftools |
