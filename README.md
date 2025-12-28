@@ -61,6 +61,8 @@
 ### 1. Prerequisites
 > **⚠️ Windows Compatibility**: Since `pysam` is not available for Windows, `hastat` **cannot** be installed directly on Windows. Windows users are highly recommended to use **WSL (Windows Subsystem for Linux)**.
 
+> **✅ Tested Environments**: We have tested the installation and download on **CentOS Linux 8** and **Ubuntu 24**.
+
 - **Python 3.9+**
 - **Dependencies**: `pandas`, `numpy`, `scipy`, `statsmodels`, `scikit-allel`, `gffutils`, `pysam`, `matplotlib`, `tomli`, `prettytable`, `networkx`
 
