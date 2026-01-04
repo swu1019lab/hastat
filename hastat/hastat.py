@@ -127,7 +127,7 @@ def main():
                            help='CSV file with sample phenotype data (samples, trait1, trait2, ...)')
     parser_box.add_argument('--phe_index', type=int, default=1,
                            help='Index of phenotype column to use (default: %(default)s)')
-    parser_box.add_argument('--comparisons', type=str, nargs='+', action='append',
+    parser_box.add_argument('--comparisons', type=str, nargs=2, action='append',
                            help='Pairs of haplotypes for statistical comparison, e.g., --comparisons A B --comparisons A C')
     parser_box.add_argument('--method', type=str, choices=['t-test', 'mannwhitneyu', 'welch'], default='t-test',
                            help='Statistical test method for comparisons (default: %(default)s)')
