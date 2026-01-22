@@ -510,5 +510,4 @@ Run GWAS using GEMMA.
 ## 📄 Citation
 
 If you use **hastat** in your research, please cite:
-
-> **Xiaodong Li, & Kun Lu. (2024).** hastat: a python library to perform gene haplotypes analysis in natural populations. *Zenodo*. https://doi.org/10.5281/zenodo.11183815
+> **Xiaodong Li, Yuhong Wang, Boyu Meng, Zhixuan Qin, Minghao Zhang, Jiaming Song, Kun Lu**, Hastat: Mining Favorable Haplotypes of Trait-Associated Genes for Breeding Improvement in Natural Populations, *Horticulture Research*, 2026;, uhag018, https://doi.org/10.1093/hr/uhag018
