@@ -184,8 +184,25 @@ Perform statistical tests to associate haplotypes with phenotypes.
 - **Input**: Haplotype groups (from `view -t group`) and Phenotype data (`-p`).
 - **Method**: ANOVA followed by multiple comparisons (`TukeyHSD` or `AllPairTest`).
 
+#### Phenotype Data Format
+The phenotype data file should be a CSV file with the following format:
+- **First column**: Sample ID (must match sample names in haplotype group file).
+- **Remaining columns**: Phenotypic traits. You can have multiple traits (columns), and each will be analyzed separately.
+- **Header**: First row should contain column names (samples, trait1, trait2, ...).
+
+**Example phenotype data (`phenotype.csv`):**
+```
+samples,Height,Weight,Yield,Quality
+Sample_1,175.5,65.2,8500.5,7.8
+Sample_2,172.3,62.8,8200.3,7.5
+Sample_3,178.9,68.1,9100.2,8.1
+Sample_4,170.5,61.5,7800.8,7.2
+Sample_5,176.2,66.5,8900.5,8.0
+```
+
+**Usage:**
 ```bash
-hastat stat -g hap_groups.csv -p traits.csv -a GeneID -o stat_results.csv
+hastat stat -g hap_groups.csv -p phenotype.csv -a GeneID -o stat_results.csv
 ```
 
 ### 3. Visualization (`hastat plot`)
