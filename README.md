@@ -165,7 +165,7 @@ Network positions are a display layout.
 One combined figure shows five CDS blocks, both 2 kb flanks, variant annotations,
 48 variant columns, eight clustered haplotypes, sample counts, category colors,
 REF/ALT profile proportions, three population Pi series and all three pairwise
-Fst series. The 4 kb gene occupies 50.0% of the 8 kb physical region.
+Fst series, and Tajima's D for three populations. The 4 kb gene occupies 50.0% of the 8 kb physical region.
 
 `hap_file = "gene"` reads `gene.table.csv` and discovers `gene.group.csv` for
 labels such as `Hap1 (n=36)`. Category colors come from `hap_color_file`.
@@ -174,12 +174,12 @@ reference/alternate homozygotes. REF/ALT strips count distinct haplotypes in
 each category without weighting by sample counts.
 
 Features, SNP endpoints, annotations and window tracks share physical
-coordinates; matrix columns remain equally spaced. Pi/Fst values are read from
+coordinates; matrix columns remain equally spaced. Pi/Fst/Tajima's D values are read from
 existing window CSVs; the plotting command does not recalculate them.
 Strand heads appear in intron gaps, below the feature blocks; a separate
 direction marker is used for single-feature or tightly packed genes.
 
-![Gene and haplotypes aligned with Pi and Fst windows](docs/images/gene_tracks.png)
+![Gene and haplotypes aligned with Pi, Fst and Tajima's D windows](docs/images/gene_tracks.png)
 
 The [example guide](docs/EXAMPLES.md) includes exact commands, input schemas,
 TOML settings, interpretation notes and editable PDF/SVG downloads.
@@ -639,7 +639,7 @@ negative Fst estimates.
 | `hap_freq_height` | float | Height of each frequency track. | `0.05` |
 | `hap_freq_y` | float | Y position for frequency tracks. | `-0.2` |
 | `hap_freq_plot_type` | string | Plot type: `"bar"` or `"pie"`. | `"bar"` |
-| **Tracks (Pi/Fst)** | | | |
+| **Tracks (Pi/Fst/Tajima's D)** | | | |
 | `pi_file` | string | Path to Pi data CSV file. | `""` |
 | `pi_y` | float | Y position for Pi plot. | `0.6` |
 | `pi_height` | float | Height of Pi plot. | `0.15` |
@@ -648,6 +648,10 @@ negative Fst estimates.
 | `fst_y` | float | Y position for Fst plot. | `0.8` |
 | `fst_height` | float | Height of Fst plot. | `0.15` |
 | `fst_style` | string | Plot style: `"line"` or `"fill"`. | `"fill"` |
+| `tajima_d_file` | string | Path to the Tajima's D window CSV. | `""` |
+| `tajima_d_y` | float | Y position for the Tajima's D plot. | `0.3` |
+| `tajima_d_height` | float | Height of the Tajima's D plot. | `0.2` |
+| `tajima_d_style` | string | Plot style: `"line"` or `"fill"`. | `"fill"` |
 
 ```toml
 [default]

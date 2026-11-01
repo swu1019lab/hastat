@@ -6,8 +6,8 @@ from hastat.utils.sample_data import numeric_trait
 
 
 def read_window_track(path, statistic):
-    if statistic not in ('pi', 'fst'):
-        raise ValueError('Window track statistic must be pi or fst')
+    if statistic not in ('pi', 'fst', 'tajima_d'):
+        raise ValueError('Window track statistic must be pi, fst or tajima_d')
     with open(path, encoding='utf-8-sig', newline='') as handle:
         header = next(csv.reader(handle), [])
     if len(header) != len(set(header)) or any(not name.strip() for name in header):

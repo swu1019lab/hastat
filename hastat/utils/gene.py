@@ -15,10 +15,6 @@ from hastat.utils.ld import ld_r_squared
 
 
 TAJIMA_COLUMNS = ['chrom', 'start', 'end', 'counts', 'tajima_d']
-TAJIMA_QC_COLUMNS = TAJIMA_COLUMNS + [
-    'n_samples', 'n_chromosomes', 'sites_used', 'sites_excluded_missing',
-    'segregating_sites',
-]
 
 
 class GeneFeature(object):
@@ -452,7 +448,7 @@ class GeneVariant(object):
         
         return np.vstack(all_fst_data)
 
-    def get_tajima_d_data(self, chrom_name, chrom_start, chrom_end, size=1, step=1, sample_list=None, het_threshold=None, include_qc=False):
+    def get_tajima_d_data(self, chrom_name, chrom_start, chrom_end, size=1, step=1, sample_list=None, het_threshold=None):
         """
         Get Tajima's D data of target samples using sliding window method
 
@@ -463,9 +459,7 @@ class GeneVariant(object):
         :param step: step size
         :param sample_list: a list contained sample names
         :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param include_qc: append fixed sample size, retained/excluded SNP counts,
-                           and segregating sites (TAJIMA_QC_COLUMNS)
-        :return: a numpy array with TAJIMA_COLUMNS, or TAJIMA_QC_COLUMNS
+        :return: a numpy array with TAJIMA_COLUMNS
 
         Keep the selected population fixed and exclude each SNP with any
         missing diploid call in that population. Apply the original Tajima D
@@ -481,27 +475,20 @@ class GeneVariant(object):
             first, last = np.searchsorted(pos, left), np.searchsorted(pos, right, side='right')
             window_ac = ac[first:last][complete[first:last]]
             counts = int(last - first)
-            used = len(window_ac)
-            excluded = counts - used
             segregating = int(window_ac.count_segregating())
             value = np.nan
             if n_chromosomes >= 4 and segregating >= 3:
                 value = float(allel.tajima_d(window_ac, min_sites=3))
                 if not np.isfinite(value):
                     value = np.nan
-            rows.append([chrom_name, int(left), int(right), counts, value,
-                         n_chromosomes // 2, n_chromosomes, used, excluded,
-                         segregating])
+            rows.append([chrom_name, int(left), int(right), counts, value])
         if np.any(~complete):
             logger.warning(f"Tajima's D excludes {np.count_nonzero(~complete)} SNPs with missing "
                            "calls in the selected population; uses complete sites with a fixed "
                            "sample set. Non-random missingness can bias the retained spectrum.")
-        if include_qc:
-            return np.asarray(rows, dtype=object)
-        # Normal API/CLI output uses five columns; extra diagnostics are opt-in.
-        return np.asarray([row[:len(TAJIMA_COLUMNS)] for row in rows], dtype=str)
+        return np.asarray(rows, dtype=str)
 
-    def get_multi_loci_tajima_d_data(self, loci, size=1, step=1, sample_list=None, het_threshold=None, include_qc=False):
+    def get_multi_loci_tajima_d_data(self, loci, size=1, step=1, sample_list=None, het_threshold=None):
         """
         Get Tajima's D data from multiple regions (for homologous genes)
 
@@ -516,13 +503,12 @@ class GeneVariant(object):
         
         all_tajima_d_data = []
         for chrom_name, chrom_start, chrom_end in loci:
-            tajima_d_data = self.get_tajima_d_data(chrom_name, chrom_start, chrom_end, size, step, sample_list, het_threshold, include_qc)
+            tajima_d_data = self.get_tajima_d_data(chrom_name, chrom_start, chrom_end, size, step, sample_list, het_threshold)
             if tajima_d_data.size > 0:
                 all_tajima_d_data.append(tajima_d_data)
         
         if not all_tajima_d_data:
-            return np.empty((0, len(TAJIMA_QC_COLUMNS) if include_qc else len(TAJIMA_COLUMNS)),
-                            dtype=object if include_qc else str)
+            return np.empty((0, len(TAJIMA_COLUMNS)), dtype=str)
         
         return np.vstack(all_tajima_d_data)
 

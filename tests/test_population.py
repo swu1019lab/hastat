@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import allel
 import gffutils
@@ -13,7 +14,7 @@ import pandas as pd
 import pysam
 
 from hastat.func import view
-from hastat.utils.gene import GeneFeature, GeneVariant, TAJIMA_COLUMNS, TAJIMA_QC_COLUMNS
+from hastat.utils.gene import GeneFeature, GeneVariant, TAJIMA_COLUMNS
 
 
 COMPLETE = [
@@ -186,56 +187,42 @@ class PopulationValidation(unittest.TestCase):
         self.assertTrue(math.isnan(float(data[1, -1])))
         subset = gv.get_tajima_d_data('chr1', 20, 29, size=10, step=10, sample_list=['s2', 's3'])
         self.assertTrue(math.isfinite(float(subset[0, -1])))
-        qc = pd.DataFrame(gv.get_tajima_d_data('chr1', 20, 29, size=10, step=10,
-                                             include_qc=True), columns=TAJIMA_QC_COLUMNS)
-        self.assertTrue(math.isnan(qc.iloc[0].tajima_d))
-        self.assertEqual(qc.iloc[0].sites_used, 2)
-        subset_qc = pd.DataFrame(gv.get_tajima_d_data('chr1', 20, 29, size=10, step=10,
-                                      sample_list=['s2', 's3'], include_qc=True), columns=TAJIMA_QC_COLUMNS)
-        self.assertEqual(subset_qc.iloc[0].sites_excluded_missing, 0)
-        self.assertEqual(subset_qc.iloc[0].n_chromosomes, 4)
+        expected = tajima_reference([(p, ref, alt, calls[1:]) for p, ref, alt, calls in rows[3:]])
+        self.assertAlmostEqual(float(subset[0, -1]), expected, places=12)
 
-    def test_tajima_excludes_incomplete_sites_and_reports_qc(self):
+    def test_tajima_excludes_incomplete_sites(self):
         complete = [(p, 'A', 'G', ['0/0', '0/1', '1/1']) for p in (10, 11, 12)]
         complete.append((13, 'A', 'G', ['1/1', '1/1', '1/1']))
         gv = self.variant(complete + [(14, 'A', 'G', ['0/.', '0/0', '1/1'])])
-        qc = pd.DataFrame(gv.get_tajima_d_data('chr1', 10, 19, size=10, step=10,
-                                             include_qc=True), columns=TAJIMA_QC_COLUMNS)
-        row = qc.iloc[0]
-        self.assertEqual([row.counts, row.sites_used, row.sites_excluded_missing,
-                          row.segregating_sites, row.n_samples, row.n_chromosomes], [5, 4, 1, 3, 3, 6])
-        self.assertNotIn('status', qc.columns)
-        self.assertAlmostEqual(row.tajima_d, tajima_reference(complete), places=12)
-        legacy = gv.get_tajima_d_data('chr1', 10, 19, size=10, step=10)
-        self.assertEqual(legacy.shape, (1, 5))
-        self.assertAlmostEqual(float(legacy[0, -1]), row.tajima_d, places=14)
+        with patch('hastat.utils.gene.allel.tajima_d', wraps=allel.tajima_d) as calculate:
+            result = gv.get_tajima_d_data('chr1', 10, 19, size=10, step=10)
+        self.assertEqual(result.shape, (1, 5))
+        self.assertEqual(int(result[0, 3]), 5)
+        self.assertAlmostEqual(float(result[0, -1]), tajima_reference(complete), places=12)
+        np.testing.assert_array_equal(calculate.call_args.args[0], [[3, 3]] * 3 + [[0, 6]])
 
-    def test_tajima_qc_distinguishes_undefined_cases(self):
+    def test_tajima_undefined_cases_return_nan(self):
         gv = self.variant([(10, 'A', 'G', ['./.', './.', './.']),
                            (20, 'A', 'G', ['0/0', '0/1', '1/1'])])
-        scenarios = [(50, 59, None, 'empty_window', 0, 0),
-                     (10, 19, None, 'no_complete_sites', 1, 0),
-                     (20, 29, None, 'insufficient_segregating_sites', 1, 1),
-                     (20, 29, ['s1'], 'insufficient_samples', 1, 1)]
-        for start, end, samples, reason, count, used in scenarios:
-            qc = pd.DataFrame(gv.get_tajima_d_data('chr1', start, end, size=10, step=10,
-                               sample_list=samples, include_qc=True), columns=TAJIMA_QC_COLUMNS)
-            self.assertNotIn('status', qc.columns)
-            self.assertEqual(qc.iloc[0].counts, count)
-            self.assertEqual(qc.iloc[0].sites_used, used)
-            self.assertTrue(math.isnan(qc.iloc[0].tajima_d))
+        for start, end, samples, count in [(50, 59, None, 0), (10, 19, None, 1),
+                                           (20, 29, None, 1), (20, 29, ['s1'], 1)]:
+            with self.subTest(start=start, samples=samples), patch('hastat.utils.gene.allel.tajima_d') as calculate:
+                result = gv.get_tajima_d_data('chr1', start, end, size=10, step=10, sample_list=samples)
+                self.assertEqual(result.shape, (1, 5))
+                self.assertEqual(int(result[0, 3]), count)
+                self.assertTrue(math.isnan(float(result[0, -1])))
+                calculate.assert_not_called()
 
     def test_tajima_never_switches_sample_cohort_across_sites(self):
         rows = [(10, 'A', 'G', ['./.', '0/1', '1/1']),
                 (11, 'A', 'G', ['0/0', './.', '1/1']),
                 (12, 'A', 'G', ['0/0', '0/1', './.'])]
         gv = self.variant(rows)
-        qc = pd.DataFrame(gv.get_tajima_d_data('chr1', 10, 19, size=10, step=10,
-                                             include_qc=True), columns=TAJIMA_QC_COLUMNS)
-        self.assertEqual(qc.iloc[0].n_samples, 3)
-        self.assertEqual(qc.iloc[0].sites_used, 0)
-        self.assertEqual(qc.iloc[0].sites_excluded_missing, 3)
-        self.assertTrue(math.isnan(qc.iloc[0].tajima_d))
+        with patch('hastat.utils.gene.allel.tajima_d') as calculate:
+            result = gv.get_tajima_d_data('chr1', 10, 19, size=10, step=10)
+        self.assertEqual(int(result[0, 3]), 3)
+        self.assertTrue(math.isnan(float(result[0, -1])))
+        calculate.assert_not_called()
 
     def test_tajima_missing_matrices_match_independent_complete_site_reference(self):
         rng = np.random.default_rng(20261101)
@@ -249,26 +236,28 @@ class PopulationValidation(unittest.TestCase):
                 keep = ~mask.any(axis=1)
                 retained = [row for row, include in zip(rows, keep) if include]
                 gv = self.variant(rows, samples=tuple(f's{i}' for i in range(n)))
-                qc = pd.DataFrame(gv.get_tajima_d_data('chr1', 10, 29, size=20, step=20,
-                                  include_qc=True), columns=TAJIMA_QC_COLUMNS)
+                with patch('hastat.utils.gene.allel.tajima_d', wraps=allel.tajima_d) as calculate:
+                    result = gv.get_tajima_d_data('chr1', 10, 29, size=20, step=20)
                 expected = tajima_reference(retained) if retained else math.nan
-                np.testing.assert_allclose(qc.iloc[0].tajima_d, expected, rtol=1e-12, atol=1e-12, equal_nan=True)
-                self.assertEqual(qc.iloc[0].sites_used, int(keep.sum()))
-                self.assertEqual(qc.iloc[0].sites_excluded_missing, int((~keep).sum()))
-                self.assertEqual(qc.iloc[0].n_chromosomes, 2 * n)
+                np.testing.assert_allclose(float(result[0, -1]), expected, rtol=1e-12, atol=1e-12, equal_nan=True)
+                self.assertEqual(int(result[0, 3]), 20)
+                if calculate.called:
+                    expected_ac = np.column_stack([(calls[keep] == a).sum(axis=(1, 2)) for a in (0, 1)])
+                    np.testing.assert_array_equal(calculate.call_args.args[0], expected_ac)
 
-    def test_tajima_qc_multiple_loci_and_overlapping_windows(self):
+    def test_tajima_multiple_loci_and_overlapping_windows(self):
         rows = [(p, 'A', 'G', ['0/0', '0/1', '1/1']) for p in range(10, 20)]
         rows[4] = (14, 'A', 'G', ['0/.', '0/1', '1/1'])
         gv = self.variant(rows)
-        qc = pd.DataFrame(gv.get_tajima_d_data('chr1', 10, 19, size=6, step=4,
-                                             include_qc=True), columns=TAJIMA_QC_COLUMNS)
-        self.assertEqual(qc.sites_excluded_missing.tolist(), [1, 1])
-        self.assertEqual(qc.sites_used.tolist(), [5, 5])
+        result = gv.get_tajima_d_data('chr1', 10, 19, size=6, step=4)
+        self.assertEqual(result.shape, (2, 5))
+        np.testing.assert_array_equal(result[:, 3].astype(int), [6, 6])
+        for row in result:
+            retained = [r for r in rows if int(row[1]) <= r[0] <= int(row[2]) and r[0] != 14]
+            self.assertAlmostEqual(float(row[-1]), tajima_reference(retained), places=12)
         loci = [('chr1', 10, 15), ('chr1', 14, 19)]
-        multi = gv.get_multi_loci_tajima_d_data(loci, size=6, step=4, include_qc=True)
-        np.testing.assert_array_equal(multi, qc.to_numpy())
-        self.assertEqual(gv.get_multi_loci_tajima_d_data([], include_qc=True).shape, (0, len(TAJIMA_QC_COLUMNS)))
+        np.testing.assert_array_equal(gv.get_multi_loci_tajima_d_data(loci, size=6, step=4), result)
+        self.assertEqual(gv.get_multi_loci_tajima_d_data([]).shape, (0, len(TAJIMA_COLUMNS)))
 
     def test_tajima_small_sample_and_too_few_segregating_sites(self):
         gv = self.variant()

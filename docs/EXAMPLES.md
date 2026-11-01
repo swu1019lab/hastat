@@ -5,7 +5,7 @@ gene. All five use the same **160 synthetic samples, eight haplotypes and
 48 variants**. Panel1/Panel2/Panel3 contain 52/54/54 samples; Hap1–Hap8 contain
 36/30/24/20/18/14/10/8. Trait values and Pi/Fst estimates are illustrative.
 
-After installing this development version, run from the repository root:
+After installing hastat, run from the repository root:
 
     bash docs/examples/commands.sh
 
@@ -33,6 +33,8 @@ labels may import as multiple text objects.
 | [hap_colors.csv](examples/hap_colors.csv) | Headerless haplotype/category pairs; ClassA: Hap1–3, ClassB: Hap4–5, ClassC: Hap6–8. |
 | [annotations.csv](examples/annotations.csv) | chrom,pos,ann labels at selected upstream, coding and downstream sites. |
 | [gene.pi.csv](examples/gene.pi.csv), [gene.fst.csv](examples/gene.fst.csv) | Forty 200 bp windows per series, over bases 501–8500; three Pi populations and three pairwise Fst series. |
+| [gene.vcf](examples/gene.vcf) | Diploid genotypes for the same 160 synthetic samples and 48 variants. |
+| [gene.tajima_d.csv](examples/gene.tajima_d.csv) | Tool-calculated Tajima's D for three populations; 1 kb windows, 500 bp steps, clipped at base 8500. |
 | [gene_tracks.toml](examples/gene_tracks.toml) | Complete gene-plot configuration, including frequency and window tracks. |
 | [gene.network.csv](examples/gene.network.csv) | MSN edges generated from the same 48-variant table. |
 
@@ -101,6 +103,9 @@ Read from top to bottom:
    category, without weighting by the sample counts in the row labels.
 4. Pi for three populations, followed by all three pairwise Fst series.
    Both use existing 200 bp window estimates. Pi is displayed in units of 10⁻³.
+5. Tajima's D for three populations, calculated from gene.vcf with 1 kb windows
+   and 500 bp steps. Points mark window midpoints; the dashed line marks zero.
+   Undefined values remain gaps, including windows with fewer than three segregating sites.
 
 The file prefix requires gene.table.csv and discovers optional gene.group.csv.
 When the group file is absent, labels omit sample counts. hap_color_file
@@ -113,12 +118,21 @@ The 4 kb gene occupies 50.0% of the 8 kb interval. Genomic features, annotations
 variant endpoints and window midpoints share physical coordinates; matrix
 columns stay equally spaced.
 
-The plot reads existing Pi/Fst CSV values. For biological analyses, generate
-corresponding windows using hastat view -t pi and hastat view -t fst over the
-same region and populations.
+The plot reads existing Pi/Fst/Tajima's D CSV values. For biological analyses,
+generate corresponding windows using `hastat view -t pi`, `-t fst` or
+`-t tajima_d` over the same region and populations. The example script computes
+Tajima's D from the supplied synthetic VCF before plotting. Its normal CSV uses
+`chrom,start,end,counts,tajima_d,groups`. Set the track in the TOML:
+
+```toml
+tajima_d_file="gene.tajima_d.csv"
+tajima_d_y=0.0
+tajima_d_height=0.12
+tajima_d_style="line"
+```
+
+`tajima_d_y` and `tajima_d_height` position the track relative to the gene's
+bounding box. The complete example reserves separate space below Pi and Fst.
 [PDF](images/gene_tracks.pdf) · [SVG](images/gene_tracks.svg)
 
-Public inputs, commands and figures are user documentation. Tests, developer
-validation code, parser caches, logs and QA reports are kept separately and
-excluded from both release distribution formats.
 

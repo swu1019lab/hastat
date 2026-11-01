@@ -155,12 +155,12 @@ class GeneTrackValidation(unittest.TestCase):
     def test_missing_configured_files_raise_and_unreadable_inputs_raise(self):
         obj = self.obj()
         obj.toml_file = self.root / 'plot.toml'
-        for key in ('pi_file', 'fst_file', 'ann_file', 'hap_file', 'hap_color_file'):
+        for key in ('pi_file', 'fst_file', 'tajima_d_file', 'ann_file', 'hap_file', 'hap_color_file'):
             obj.toml_config = {'default': {key: 'missing.csv'}}
             with self.subTest(key=key), self.assertRaises(FileNotFoundError):
                 obj._get_gene_config('G1')
         bad = self.write('bad.csv', 'onecolumn\n')
-        for method in (obj._load_annotation_data, obj._load_haplotype_group_data, obj._load_pi_data, obj._load_fst_data):
+        for method in (obj._load_annotation_data, obj._load_haplotype_group_data, obj._load_pi_data, obj._load_fst_data, obj._load_tajima_d_data):
             with self.subTest(method=method.__name__), self.assertRaises(ValueError):
                 method(bad)
         with self.assertRaises(ValueError):
@@ -180,12 +180,12 @@ class GeneTrackValidation(unittest.TestCase):
                 (25, 'A', 'G', ['0/1', '0/1', '0/1', '0/1'])]
         vcf = write_vcf(self.root / 'input.vcf', rows, samples=samples, chrom='1')
         group = self.write('groups.csv', 'samples,groups\n001,NA\n1,NA\nNA,01\ns4,01\n')
-        for metric in ('pi', 'fst'):
+        for metric in ('pi', 'fst', 'tajima_d'):
             result = self.cli('view', '-v', vcf, '-r', '1:1-30', '-g', group, '-t', metric,
-                              '--size', 10, '--step', 10, '-o', self.root / 'windows')
+                              '--size', 30, '--step', 30, '-o', self.root / 'windows')
             self.assertEqual(result.returncode, 0, result.stderr)
         gff = gene_gff(self.root / 'genes.gff3')
-        config = self.write('gene.toml', '[default]\nbbox=[0.1,0.1,0.8,0.8]\npi_file="windows.pi.csv"\nfst_file="windows.fst.csv"\n')
+        config = self.write('gene.toml', '[default]\nbbox=[0.1,0.1,0.8,0.8]\npi_file="windows.pi.csv"\nfst_file="windows.fst.csv"\ntajima_d_file="windows.tajima_d.csv"\n')
         other = self.root / 'other'
         other.mkdir()
         output = self.root / 'gene.pdf'
@@ -198,6 +198,31 @@ class GeneTrackValidation(unittest.TestCase):
         result = self.cli('plot', 'gene', '--gff', gff, '--genes', 'G1', '--toml', config, '-o', output, cwd=other)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
+
+    def test_tajima_signed_values_nan_gap_and_zero_reference(self):
+        obj = self.obj()
+        path = self.write('d.csv', 'chrom,start,end,counts,tajima_d,groups\n1,1,5,3,-1.2,NA\n1,6,10,1,,NA\n1,11,15,3,2.1,NA\n')
+        obj.toml_file = self.root / 'plot.toml'
+        obj.toml_config = {'default': {'tajima_d_file': 'd.csv', 'tajima_d_style': 'line'}}
+        config = obj._get_gene_config('G1')
+        self.assertEqual(Path(config['tajima_d_file']), path)
+        lines = obj._draw_tajima_d_plot(self.gene, config, [0, 0, 1, 1])
+        np.testing.assert_allclose(lines[0].get_ydata(), [-1.2, np.nan, 2.1], equal_nan=True)
+        np.testing.assert_allclose(lines[0].get_xdata(), [3, 8, 13])
+        self.assertEqual(lines[0].get_label(), 'NA')
+        axis = obj.ax.child_axes[0]
+        self.assertEqual(axis.get_ylabel(), "Tajima's D")
+        np.testing.assert_array_equal(axis.lines[0].get_ydata(), [0, 0])
+        self.assertEqual(axis.get_xlim(), (.5, 30.5))
+        self.assertIsNone(obj._draw_tajima_d_plot(self.gene, {}, [0, 0, 1, 1]))
+
+    def test_tajima_all_undefined_keeps_nan(self):
+        obj = self.obj()
+        path = self.write('d.csv', 'start,end,tajima_d\n1,5,NaN\n6,10,\n')
+        with self.assertLogs('hastat', level='WARNING'):
+            lines = obj._draw_tajima_d_plot(self.gene, {'tajima_d_file': path}, [0, 0, 1, 1])
+        self.assertTrue(np.isnan(lines[0].get_ydata()).all())
+        self.assertEqual(len(obj.ax.child_axes[0].collections[0].get_paths()), 0)
 
     def test_gene_only_config_without_default_table(self):
         gff = gene_gff(self.root / 'genes.gff3')

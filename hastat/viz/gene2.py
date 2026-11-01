@@ -121,7 +121,7 @@ class FancyGene(object):
                 if not group_path.is_file():
                     raise ValueError(f'Haplotype sample groups must be a readable file: {group_path}')
                 gene_config['_hap_sample_file'] = str(group_path)
-        for name in ('ann_file', 'hap_file', 'hap_color_file', 'pi_file', 'fst_file'):
+        for name in ('ann_file', 'hap_file', 'hap_color_file', 'pi_file', 'fst_file', 'tajima_d_file'):
             value = gene_config.get(name)
             if value:
                 path = Path(value).expanduser()
@@ -884,16 +884,22 @@ class FancyGene(object):
     def _load_fst_data(self, fst_file):
         return read_window_track(fst_file, 'fst') if fst_file else None
 
+    def _load_tajima_d_data(self, path):
+        return read_window_track(path, 'tajima_d') if path else None
+
     def _draw_pi_plot(self, gene_data, gene_config, bbox):
         return self._draw_window_track(gene_data, gene_config, bbox, 'pi')
 
     def _draw_fst_plot(self, gene_data, gene_config, bbox):
         return self._draw_window_track(gene_data, gene_config, bbox, 'fst')
 
+    def _draw_tajima_d_plot(self, gene_data, gene_config, bbox):
+        return self._draw_window_track(gene_data, gene_config, bbox, 'tajima_d')
+
     def _draw_window_track(self, gene_data, gene_config, bbox, statistic):
         """Draw existing window estimates with literal labels and visible points."""
         path = gene_config.get(f'{statistic}_file', '')
-        frame = self._load_pi_data(path) if statistic == 'pi' else self._load_fst_data(path)
+        frame = read_window_track(path, statistic) if path else None
         if frame is None or frame.empty:
             return None
         style = gene_config.get(f'{statistic}_style', 'fill')
@@ -910,19 +916,22 @@ class FancyGene(object):
         frame['pos_bp'] = (frame.start + frame.end) / 2
         x, y, width, height = bbox
         physical_x, _, physical_width, _ = self._physical_frame(gene_config, bbox)
-        track_y = gene_config.get(f'{statistic}_y', 0.55 if statistic == 'pi' else 0.8)
+        track_y = gene_config.get(f'{statistic}_y', {'pi': 0.55, 'fst': 0.8, 'tajima_d': 0.3}[statistic])
         track_height = gene_config.get(f'{statistic}_height', 0.2)
         track_ax = self.ax.inset_axes([physical_x, y + track_y * height, physical_width, track_height * height],
                                      transform=self.ax.transData)
         cmap = LinearSegmentedColormap.from_list(f'{statistic}_cmap',
             ['#C5504B', '#114F8B', '#FCE988', '#90CAEE'], N=100)
+        axis_label = {'pi': r'π ($10^{-3}$)', 'fst': r'F$_{st}$', 'tajima_d': "Tajima's D"}[statistic]
+        if statistic == 'tajima_d':
+            track_ax.axhline(0, color='0.6', linewidth=0.6, linestyle='--', zorder=0)
         if 'groups' in frame:
             labels = sorted(frame.groups.unique())
             colors = cmap(np.linspace(0, 1, len(labels)))
             series = [(label, frame.loc[frame.groups.eq(label)], color)
                       for label, color in zip(labels, colors)]
         else:
-            series = [('π' if statistic == 'pi' else r'F$_{st}$', frame,
+            series = [(axis_label, frame,
                        'C0' if statistic == 'pi' else 'C1')]
         handles = []
         for label, group, color in series:
@@ -941,7 +950,7 @@ class FancyGene(object):
         ticks = [start, end] if start < end else [start]
         track_ax.set_xticks(ticks)
         track_ax.set_xticklabels([f'{value:,}' for value in ticks])
-        track_ax.set_ylabel(r'π ($10^{-3}$)' if statistic == 'pi' else r'F$_{st}$', fontsize=8)
+        track_ax.set_ylabel(axis_label, fontsize=8)
         track_ax.tick_params(axis='both', labelsize=6)
         track_ax.spines[['top', 'right']].set_visible(False)
         track_ax.legend(handles, [handle.get_label() for handle in handles],
@@ -1125,6 +1134,7 @@ class FancyGene(object):
             
             # Draw fst plot if available
             self._draw_fst_plot(gene_data, gene_config, bbox)
+            self._draw_tajima_d_plot(gene_data, gene_config, bbox)
         
         # Set axis properties
         # self.ax.set_xlim(-0.1, 1.1)
