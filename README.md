@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="tests/hastat.png" alt="hastat logo" width="200"/>
+<img src="https://raw.githubusercontent.com/swu1019lab/hastat/97736b4095d4a7b1a01fccf0371c19d2ca493a08/tests/hastat.png" alt="hastat logo" width="200"/>
 
 **A Comprehensive Toolkit for Gene Haplotype Analysis in Natural Populations**
 
@@ -8,7 +8,7 @@
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-BSD3-green)](LICENSE)
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Documentation](#-documentation) • [Citation](#-citation)
+[Features](#-features) • [Installation](#-installation) • [Example results](#-example-results) • [Usage](#-usage) • [Documentation](#-documentation) • [Citation](#-citation)
 
 </div>
 
@@ -20,10 +20,23 @@
 
 ## ✨ Features
 
+### Local population-statistics correction (2026-10-31)
+
+VCF regions are now 1-based inclusive, partial missing diploid calls are handled consistently,
+and pi/Tajima's D count true alleles instead of genotype dosage categories. These two statistics
+use biallelic SNPs; windows have the requested size, clipped at the region end. Tajima's D
+keeps a fixed population and excludes SNPs with incomplete calls in that population. Windows
+with insufficient retained information return NaN. Its normal CSV retains only
+`chrom,start,end,counts,tajima_d,groups`, without added auxiliary columns. Pi uses the full
+window length and assumes absent eligible SNPs are invariant and all bases callable.
+See [POPULATION_METHODS.md](POPULATION_METHODS.md) for formulas, missing-data rules,
+input limitations, output changes and reproducible validation. Normal outputs remain CSV;
+validation metadata belongs only to the developer QA directory.
+
 ### Core Modules
 | Module | Description |
 |:---|:---|
-| 🧬 **`view`** | Extract and analyze genotype, haplotype, $\pi$, $F_{ST}$, Tajima's D, and LD data from VCF files. |
+| 🧬 **`view`** | Extract and analyze genotype, haplotype, $\pi$, $F_{ST}$ and Tajima's D data from VCF files. LD is available through the Python API. |
 | 📊 **`stat`** | Perform robust statistical analysis (ANOVA, multiple comparisons) linking haplotypes to phenotypes. |
 | 🎨 **`plot`** | Generate high-quality visualizations: Bar, Pie, Box, Network, and Gene haplotype plots. |
 | 🕸️ **`network`** | Construct haplotype networks using Minimum Spanning Tree (MST) and Minimum Spanning Network (MSN). |
@@ -79,7 +92,10 @@ cd hastat
 ```
 
 ### 3. Install hastat
-You can install `hastat` using either the modern `build` system (recommended) or `setup.py`.
+Version `1.1.0` includes statistical corrections and expanded plotting features.
+See [CHANGELOG.md](CHANGELOG.md) for release notes and parameter updates.
+
+You can install `hastat` using the modern `build` system or directly with pip.
 
 **Tip for users in China:** To speed up dependency downloading, you can use the Tsinghua PyPI mirror by adding `-i https://pypi.tuna.tsinghua.edu.cn/simple` to pip commands.
 
@@ -94,17 +110,28 @@ This method builds a standard distribution package and installs it.
     ```bash
     python -m build
     ```
-    *Explanation: This command compiles the source code and creates a `dist/` directory containing the installable package file (e.g., `hastat-1.0.0.tar.gz`).*
+    *This creates a `dist/` directory containing the source archive and wheel.*
 3.  **Install the package**:
     ```bash
-    pip install dist/hastat-1.0.0.tar.gz --user -i https://pypi.tuna.tsinghua.edu.cn/simple
+    python -m pip install dist/hastat-1.1.0-py3-none-any.whl --user -i https://pypi.tuna.tsinghua.edu.cn/simple
     ```
     *Explanation: This installs the `hastat` library and its dependencies (pandas, numpy, etc.) into your Python environment.*
 
-#### Option B: Using `setup.py` (Legacy)
+#### Option B: Install this source checkout directly
 ```bash
-python setup.py install --user
+python -m pip install . --user
 ```
+
+### Input table conventions
+
+Sample and group CSVs require a header and one row per unique sample. Identifiers
+and group labels are read as text: `001`, `1` and `NA` remain distinct. Surrounding
+whitespace is stripped; empty identifiers/labels and duplicate IDs are rejected.
+Population assignment files have exactly two columns, and every listed sample
+must exist in the VCF. Phenotype tables use a `samples` column plus numeric trait
+columns; missing tokens such as `NA` apply only to trait values. Network sample
+joins use matched samples and warn about unmatched rows; duplicate assignments
+and group indexes outside the available columns fail explicitly.
 
 ### 4. Installation Location
 When using the `--user` flag (recommended to avoid permission issues):
@@ -115,6 +142,63 @@ To verify the installation, run:
 ```bash
 hastat --help
 ```
+
+## 🖼️ Example results
+
+Each plot type is illustrated once, using a richer shared example: **160 synthetic
+samples, eight haplotypes, 48 variants and three populations**. The
+[bundled inputs](docs/examples), trait values and window statistics are
+demonstrations, not biological findings.
+[Run all examples or follow the individual commands](docs/EXAMPLES.md), or open
+the [illustrated gallery](docs/gallery.html) in a browser.
+
+### Haplotype distribution across populations
+
+The bar plot shows sample counts; the pie plot shows composition within each
+population. Both use the same assignments: Panel1/Panel2/Panel3 contain 52/54/54
+samples. Hap1–Hap8 contain 36/30/24/20/18/14/10/8 samples.
+
+| Sample counts | Within-population composition |
+|:---:|:---:|
+| ![Haplotype sample counts by population](docs/images/bar.png) | ![Haplotype composition in three populations](docs/images/pie.png) |
+
+### Phenotype comparison and haplotype network
+
+The box plot shows individual trait values, medians and quartiles; displayed
+comparisons use Tukey-adjusted P values across all eight eligible haplotypes.
+The network is constructed from genotype differences. Node colors show
+population composition, node sizes reflect sample counts, and edge labels show
+the number of unequal genotype states. Population colors match the Pi tracks.
+The external Samples (n) legend uses actual counts and exact node-size scaling.
+Network positions are a display layout.
+
+| Trait distributions | Haplotype network |
+|:---:|:---:|
+| ![Trait box plot with Tukey comparisons](docs/images/box.png) | ![MSN network with population composition](docs/images/network.png) |
+
+### Complete gene haplotype example
+
+One combined figure shows five CDS blocks, both 2 kb flanks, variant annotations,
+48 variant columns, eight clustered haplotypes, sample counts, category colors,
+REF/ALT profile proportions, three population Pi series and all three pairwise
+Fst series. The 4 kb gene occupies 50.0% of the 8 kb physical region.
+
+`hap_file = "gene"` reads `gene.table.csv` and discovers `gene.group.csv` for
+labels such as `Hap1 (n=36)`. Category colors come from `hap_color_file`.
+Average linkage uses Hamming distances. White/dark-blue cells represent
+reference/alternate homozygotes. REF/ALT strips count distinct haplotypes in
+each category without weighting by sample counts.
+
+Features, SNP endpoints, annotations and window tracks share physical
+coordinates; matrix columns remain equally spaced. Pi/Fst values are read from
+existing window CSVs; the plotting command does not recalculate them.
+Strand heads appear in intron gaps, below the feature blocks; a separate
+direction marker is used for single-feature or tightly packed genes.
+
+![Gene and haplotypes aligned with Pi and Fst windows](docs/images/gene_tracks.png)
+
+The [example guide](docs/EXAMPLES.md) includes exact commands, input schemas,
+TOML settings, interpretation notes and editable PDF/SVG downloads.
 
 ## 🚀 Usage
 
@@ -152,11 +236,21 @@ You can extend the analysis scope beyond the gene body, which is crucial for ana
 | `fst` | Calculate Fixation Index ($F_{ST}$). |
 | `tajima_d` | Calculate Tajima's D. |
 
+For single-VCF `table`, `group` and `freq`, all samples use the same complete
+loci after the requested genotype filters. The three outputs share one
+deterministic profile/rank mapping, including multi-region requests. `freq`
+contains integer sample counts: `haplotypes,samples` without metadata, or
+`haplotypes,<population names>` with a single header when grouped. Group files
+may select a sample subset for counting; they do not redefine the profiles.
+Duplicate or unknown sample assignments are rejected. Empty results retain
+headers without inventing a Hap1 group. See [haplotype/counting rules](HAPLOTYPE_METHODS.md).
+
 #### 📊 Population Genetics ($\pi$, $F_{ST}$ & Tajima's D)
+
 `hastat` calculates $\pi$, $F_{ST}$ and Tajima's D using a **sliding window** approach.
 
 - **Nucleotide Diversity ($\pi$)**: Measures the average number of nucleotide differences per site between two randomly chosen sequences in a population. It reflects the genetic diversity within a population. High $\pi$ indicates high genetic diversity.
-- **Fixation Index ($F_{ST}$)**: Measures the degree of genetic differentiation between subpopulations. It ranges from 0 to 1, where 0 implies no differentiation (random mating) and 1 implies complete differentiation (fixed differences).
+- **Fixation Index ($F_{ST}$)**: Estimates differentiation between the selected populations using Weir–Cockerham variance components. Finite-sample estimates can be negative and are retained; undefined estimates are NaN. Window estimates use a ratio of component sums, not a mean of per-SNP Fst values.
 - **Tajima's D**: A test of neutrality. It compares two measures of nucleotide diversity ($\pi$ and $\theta_W$).
     - $D \approx 0$: Neutral evolution.
     - $D > 0$: Balancing selection or sudden population contraction.
@@ -179,10 +273,20 @@ hastat view -v data.vcf.gz -a ann.gff3 -i GeneID \
     -u 1000000 -d 1000000 --size 10000 --step 10000 -o output_prefix
 ```
 
+Fst uses the same 1-based inclusive window boundaries as pi/Tajima's D. Group
+assignments must refer to existing, unique samples and contain at least two
+populations. Records lacking enough called individuals for the variance
+components are excluded; empty or unestimable windows retain NaN. Non-default
+`--maf` and `--max_missing` are rejected for pi/Fst/Tajima's D rather than
+silently ignored. The Fst CSV remains `chrom,start,end,counts,fst,groups`;
+`counts` is the input variant count, not the effective-site count. No extra
+columns or summary files are written. See [Fst methods](FST_METHODS.md).
+
 ### 2. Statistics Module (`hastat stat`)
 Perform statistical tests to associate haplotypes with phenotypes.
 - **Input**: Haplotype groups (from `view -t group`) and Phenotype data (`-p`).
-- **Method**: ANOVA followed by multiple comparisons (`TukeyHSD` or `AllPairTest`).
+- **Methods**: `TukeyHSD` (default): classical equal-variance ANOVA plus Tukey–Kramer comparisons; `WelchBonferroni`: Welch ANOVA plus two-sided Welch t tests with Bonferroni correction.
+- **Method naming**: the former `AllPairTest` name is not accepted. Select `WelchBonferroni` explicitly for the unequal-variance method. See [statistical methods](STAT_METHODS.md) for assumptions and references.
 
 #### Phenotype Data Format
 The phenotype data file should be a CSV file with the following format:
@@ -205,14 +309,47 @@ Sample_5,176.2,66.5,8900.5,8.0
 hastat stat -g hap_groups.csv -p phenotype.csv -a GeneID -o stat_results.csv
 ```
 
+For Welch ANOVA and Bonferroni-corrected Welch comparisons:
+```bash
+hastat stat -g hap_groups.csv -p phenotype.csv -m WelchBonferroni -o stat_results.csv
+```
+
+**Tool outputs:** `-o stat_results.csv` writes only the requested full-precision
+pairwise CSV table. Its fields include the method, sample counts, group means
+and standard deviations, mean differences, confidence intervals, adjusted P
+values, rejection decisions, omnibus P values, and comparison-family sizes.
+No `.summary.json` sidecar is generated. With no `-o`,
+the tool prints the comparison table and omnibus JSON records to stdout.
+These are analysis outputs produced by the tool itself. Input hashes, dependency
+versions, and SHA256 manifests in the development validation bundles are separate
+audit artifacts; the tool does not automatically produce those for every run.
+
 ### 3. Visualization (`hastat plot`)
 Generate high-quality visualizations for your data.
+
+The Python LD APIs `GeneVariant.get_ld_data` / `get_multi_loci_ld_data` return
+square r² matrices: valid diagonals are 1, undefined entries are NaN and empty
+regions return (0,0). Multi-region overlaps count once. LD uses pairwise complete
+diploid dosage observations with the existing Rogers-Huff implementation.
+See [LD methods and Python example](LD_METHODS.md); `view --type ld` is not a CLI option.
 
 #### Common Plot Types
 - **`bar` / `pie`**: Visualize haplotype frequencies in different populations.
 - **`box`**: Compare phenotypic values among haplotypes or populations.
-    - Supports significance testing (t-test, U-test).
-    - Use `--comparisons` to specify pairs for testing.
+    - `TukeyHSD` and `WelchBonferroni` reuse the `stat` implementation.
+      The existing default `t-test` and `mannwhitneyu` use Bonferroni-adjusted
+      two-sided P values; `welch` uses `WelchBonferroni`.
+    - `--comparisons` selects brackets, not the multiple-testing family.
+      The family includes all eligible groups in the input, even when
+      `--haplotypes` displays a subset. `--min_hap_size` defaults to 2 for plots
+      (10 for `stat`); use identical inputs, method and minimum for agreement.
+    - Undefined tests have no bracket; the reason is logged. `ns` is reserved
+      for finite adjusted P values >= 0.05. No extra output table is created.
+
+Box/bar/pie sample identifiers and group labels are read as text, preserving
+`001`, `1`, and `NA`. Duplicate/empty IDs and duplicate headers are errors.
+Input tables are joined one-to-one on shared IDs; unmatched rows are logged.
+Invalid plotting input produces a nonzero CLI exit. See [plot methods](PLOT_METHODS.md).
 
 #### Gene Structure & Tracks (`hastat plot gene`)
 Visualize the gene model along with haplotype variations and statistical tracks ($\pi$, $F_{ST}$).
@@ -350,6 +487,22 @@ hastat view \
 ### Multi-Population Comparison
 Compare haplotype frequencies between two populations (e.g., Panel1 vs Panel2).
 
+Inputs must use the same reference and allele representation. Compare aligns
+the full chromosome/position/REF/ALT key and groups samples on loci present in
+every input with complete calls across all included samples. It never treats
+an absent record as a reference genotype or missing calls as a haplotype state.
+The existing `population_specific` field describes input-record availability,
+not proof of a biologically private allele. Outputs are unphased genotype
+profiles; use `MergedHap` labels for comparison across populations.
+
+Local numbering is deterministic (abundance, then genotype tuple descending).
+Sample suffixes `_1`, `_2`, ... still refer to VCF input order and must match
+downstream group/phenotype files. Group CSV headers are `samples,haplotypes`.
+Empty results retain headers at the existing filenames, replacing stale
+results. Non-default `--het`, `--maf` and `--max_missing` are explicitly rejected
+for compare because they previously had no effect. See
+[comparison methods and limits](COMPARE_METHODS.md).
+
 ```bash
 # 1. Compare haplotypes from two VCFs
 hastat view -t compare \
@@ -427,7 +580,7 @@ Perform statistical tests (ANOVA, TukeyHSD).
 |:---|:---|
 | `-g, --group` | Haplotype group CSV file. Required. |
 | `-p, --pheno` | Phenotype CSV file. Required. |
-| `-m, --method` | Method: `TukeyHSD` (default) or `AllPairTest`. |
+| `-m, --method` | Method: `TukeyHSD` (default) or `WelchBonferroni`. |
 | `-s, --min_hap_size` | Minimum sample size per haplotype (default: 10). |
 </details>
 
@@ -440,7 +593,20 @@ Construct haplotype networks.
 |:---|:---|
 | `-t, --hap_table` | Haplotype table from `view -t table`. Required. |
 | `-m, --method` | `MST` (Minimum Spanning Tree) or `MSN`. |
-| `-f, --threshold_factor` | Threshold factor for MSN (default: 1.2). |
+| `-o, --out` | Output file; CSV, TXT/edgelist, GEXF and GML are supported. |
+
+`MST` returns one minimum spanning tree with deterministic tie handling. `MSN`
+retains all equal-weight alternatives occurring in any minimum spanning tree;
+the former `-f/--threshold_factor` heuristic has been removed. Distances count
+unequal 0/1/2 states on loci complete across all input haplotypes. Loci containing
+`-1` or missing calls are excluded for every pair; no complete loci produces an
+error. Zero-distance haplotypes retain their distinct names.
+
+Single haplotypes survive export and plotting input. Network CSV keeps the
+existing `source,target,weight,type` columns: an isolated node uses `type=node`
+with empty target and weight. TXT stores an isolated node as a `#node` comment
+understood by hastat; use GEXF/GML when another application must retain it.
+See [network methods and limitations](NETWORK_METHODS.md).
 </details>
 
 <details>
@@ -461,12 +627,18 @@ Visualize results. Subcommands: `bar`, `pie`, `box`, `network`, `gene`.
 **Gene Plot Configuration (`gene.toml`):**
 Control the appearance of gene structure plots using a TOML file.
 
+Paths inside this TOML are relative to the TOML file's directory (absolute paths
+are also accepted). A specified missing or unreadable file causes an error.
+Pi/Fst tracks accept the existing `view` CSV outputs, preserve literal chromosome
+and group labels, show single-window values as points, and retain NaN gaps and
+negative Fst estimates. See [gene track display rules](GENE_PLOT_METHODS.md).
+
 | Parameter | Type | Description | Default |
 |:---|:---|:---|:---|
 | **Gene Structure** | | | |
 | `bbox` | list | Bounding box `[x, y, width, height]` relative to figure. | `[0.1, 0.1, 0.8, 0.8]` |
-| `xy` | list | Gene anchor point `[x, y]` relative to bbox. | `[0, 0.5]` |
-| `width` | float | Gene width relative to bbox. | `1.0` |
+| `xy` | list | `[region left, gene center y]` relative to bbox; x also anchors Pi/Fst tracks. | `[0, 0.5]` |
+| `width` | float | Selected region width relative to bbox, shared by gene coordinates and Pi/Fst tracks. | `1.0` |
 | `height` | float | Gene height relative to bbox. | `0.1` |
 | `color` | string | Gene color. | `"C1"` |
 | `feature` | string | Feature to plot (e.g., "CDS", "exon"). | `"CDS"` |
@@ -477,16 +649,19 @@ Control the appearance of gene structure plots using a TOML file.
 | `ann_y` | float | Y position for annotations relative to bbox. | `0.8` |
 | `ann_text_size` | int | Font size for annotation text. | `8` |
 | **Haplotypes** | | | |
-| `hap_file` | string | Path to haplotype data CSV file. | `""` |
+| `hap_file` | string | Input prefix: reads `<prefix>.table.csv` and automatically uses `<prefix>.group.csv` for sample counts if present. An explicit `.table.csv` path is also accepted. | `""` |
 | `hap_y` | float | Y position for haplotype matrix relative to bbox. | `0.0` |
 | `hap_height` | float | Height of haplotype matrix relative to bbox. | `0.3` |
 | `hap_cols` | list | List of specific haplotypes to show (empty for all). | `[]` |
 | `hap_label_show` | bool | Whether to show haplotype labels. | `true` |
 | `hap_label_size` | int | Font size for haplotype labels. | `8` |
+| `hap_count_show` | bool | Show assigned sample counts as `Hap1 (n=25)` when the matching `.group.csv` exists. | `true` when `.group.csv` exists |
 | **Haplotype Groups** | | | |
-| `hap_group_file` | string | Path to haplotype group CSV file. | `""` |
+| `hap_color_file` | string | Optional headerless CSV: haplotype, category. Categories receive automatic colors; this is not a sample assignment file. | `""` |
 | `hap_group_bar_x` | float | X position offset for group bar. | `-0.12` |
 | `hap_group_bar_width` | float | Width of group bar. | `0.02` |
+| `hap_cluster_show` | bool | Show a Hamming-distance hierarchical tree; missing loci are excluded consistently across displayed haplotypes. | `false` |
+| `hap_cluster_linkage` | string | `average`, `complete`, `single` or `weighted`. Ward/centroid/median are incompatible with this distance. | `"average"` |
 | `hap_freq_show` | bool | Whether to show frequency tracks. | `true` |
 | `hap_freq_height` | float | Height of each frequency track. | `0.05` |
 | `hap_freq_y` | float | Y position for frequency tracks. | `-0.2` |
@@ -507,9 +682,32 @@ Control the appearance of gene structure plots using a TOML file.
 bbox = [0.1, 0.1, 0.8, 0.8]
 color = "C1"
 gene_label_show = true
-hap_file = "haplotypes.csv"
+hap_file = "gene"
 pi_file = "pi.csv"
 ```
+
+The prefix above reads `gene.table.csv`; if `gene.group.csv` exists, sample counts
+are added automatically. If it is absent, labels show names only. Generate both
+files with the same region, samples and filters. Counts refer to unique assigned
+samples, not SNPs or chromosome copies, and stay with their names after selection
+and clustering. A present but malformed/mismatched group file is an error, even
+when counts are hidden. `hap_count_show=false` hides counts. `sample_hap_file` is
+removed; replace the old category setting `hap_group_file` with `hap_color_file`.
+The latter remains a headerless file such as `Hap1,A` / `Hap2,B`.
+
+Clustering uses average linkage by default on Hamming distances across common
+complete loci. Singletons remain visible, two haplotypes form a one-branch tree,
+and tied distances are resolved from a stable ID order. Missing calls do not form
+a genotype category. No shared complete locus or an incompatible method causes
+an explicit error. See [gene plot methods](GENE_PLOT_METHODS.md).
+
+Gene features, annotation targets, SNP connection endpoints and Pi/Fst tracks
+share the selected physical region, including requested upstream/downstream
+bases. Coordinates increase left to right on both strands; the strand arrow
+indicates transcription direction. GFF feature lengths are inclusive, so a
+single-base feature remains visible. Haplotype matrix columns remain equally
+spaced; their connectors map back to physical positions. This affects drawing
+positions only, not the supplied window estimates or output columns.
 </details>
 
 <details>

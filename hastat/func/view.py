@@ -8,6 +8,7 @@ import time
 import pandas as pd
 from itertools import combinations
 from hastat.log.logger import logger
+from hastat.utils.sample_data import read_assignments
 
 # Set the display option to show all rows
 pd.set_option('display.max_rows', None)
@@ -16,8 +17,20 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 
 
+def _read_fst_groups(path, available_samples):
+    """Validate group assignments before any Fst comparison or result write."""
+    return read_assignments(path, available_samples=available_samples, min_groups=2)
+
+
 def run(args):
     logger.info('Start to run view function')
+
+    if args.type in ('pi', 'fst', 'tajima_d') and (args.maf != 0 or args.max_missing != 1):
+        raise ValueError("--maf and --max_missing are not supported for pi/fst/tajima_d; "
+                         "these options previously had no effect on these outputs")
+    if args.type == 'compare' and (args.het is not None or args.maf != 0 or args.max_missing != 1):
+        raise ValueError("--het, --maf and --max_missing are not supported for compare; "
+                         "these options previously had no effect on this output")
 
     from hastat.utils import gene
     from hastat.dataio import gff, vcf
@@ -48,8 +61,17 @@ def run(args):
     
     if args.region:
         logger.info(f"Analyzing region: {args.region}")
-        chrom, start, end = args.region.replace(' ', '').replace('-', ':').split(':')
-        tasks.append({'name': args.region, 'loci': [(chrom, int(start), int(end))], 'multi': False})
+        try:
+            chrom, interval = args.region.replace(' ', '').rsplit(':', 1)
+            start, end = map(int, interval.split('-'))
+        except ValueError as exc:
+            raise ValueError("Region must be chrom:start-end (1-based inclusive)") from exc
+        gene.GeneVariant._validate_region(start, end)
+        if args.upstream < 0 or args.downstream < 0:
+            raise ValueError("Upstream and downstream lengths must be non-negative")
+        start = max(1, start - args.upstream)
+        end += args.downstream
+        tasks.append({'name': args.region, 'loci': [(chrom, start, end)], 'multi': False})
     elif args.gene_id:
         logger.info(f"Analyzing gene: {args.gene_id}")
         gf = gene.GeneFeature(gff.read(args.gff))
@@ -114,16 +136,15 @@ def run(args):
             if task_out:
                 # Population haplotype table and groups based on core variants
                 for pop_name in pop_names:
-                    if f'{pop_name}_hap_table' in results and not results[f'{pop_name}_hap_table'].empty:
-                        results[f'{pop_name}_hap_table'].to_csv(f"{task_out}_{pop_name}.table.csv", index=False)
-                        results[f'{pop_name}_hap_groups'].to_csv(f"{task_out}_{pop_name}.group.csv", index=False)
-                        logger.info(f"Population {pop_name} haplotype results saved: {task_out}_{pop_name}.table.csv and {task_out}_{pop_name}.group.csv")
+                    results[f'{pop_name}_hap_table'].to_csv(f"{task_out}_{pop_name}.table.csv", index=False)
+                    results[f'{pop_name}_hap_groups'].to_csv(f"{task_out}_{pop_name}.group.csv", index=False)
+                    logger.info(f"Population {pop_name} haplotype results saved: {task_out}_{pop_name}.table.csv and {task_out}_{pop_name}.group.csv")
                 
                 # Merged populations haplotype table and groups (based on core variants)
-                if not results['merged_hap_table'].empty:
-                    results['merged_hap_table'].to_csv(f"{task_out}.merged.table.csv", index=False)
-                    results['merged_hap_groups'].to_csv(f"{task_out}.merged.group.csv", index=False)
-                    logger.info(f"Merged population results saved: {task_out}.merged.table.csv and {task_out}.merged.group.csv")
+                # Header-only empty outputs also replace stale results at this prefix.
+                results['merged_hap_table'].to_csv(f"{task_out}.merged.table.csv", index=False)
+                results['merged_hap_groups'].to_csv(f"{task_out}.merged.group.csv", index=False)
+                logger.info(f"Merged population results saved: {task_out}.merged.table.csv and {task_out}.merged.group.csv")
                 
                 # Summary comparison results
                 results['comparison_summary'].to_csv(f"{task_out}.comparison_summary.csv", index=False)
@@ -146,7 +167,6 @@ def run(args):
             data = gv.multi_loci_hap_table(merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else gv.hap_table(*merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")
-                continue
             if task_out:
                 data.to_csv(task_out + '.' + args.type + '.csv', index=False)
             else:
@@ -155,13 +175,14 @@ def run(args):
             data = gv.multi_loci_hap_groups(merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else gv.hap_groups(*merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")
-                continue
             if task_out:
                 data.to_csv(task_out + '.' + args.type + '.csv', index=False)
             else:
                 print(data)
         elif args.type == 'freq':
-            groups = pd.read_csv(args.group, header=0, names=['samples', 'groups']) if args.group else None
+            groups = None
+            if args.group:
+                groups = read_assignments(args.group, available_samples=gv.vcf_in.header.samples)
             if multi_loci:
                 data = gv.calc_multi_loci_hap_freq(merged_loci, groups, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             else:
@@ -169,7 +190,6 @@ def run(args):
             data.reset_index(inplace=True)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")
-                continue
             if task_out:
                 data.to_csv(task_out + '.' + args.type + '.csv', index=False)
             else:
@@ -178,7 +198,7 @@ def run(args):
             if not args.group:
                 logger.error("The group file should be provided!!!")
                 raise ValueError("The group file should be provided!!!")
-            groups = pd.read_csv(args.group, header=0, names=['samples', 'groups'])
+            groups = read_assignments(args.group, available_samples=gv.vcf_in.header.samples)
             data_list = []
             # list all groups to calculate Pi
             for group in groups.groups.unique():
@@ -207,7 +227,7 @@ def run(args):
             if not args.group:
                 logger.error("The group file should be provided!!!")
                 raise ValueError("The group file should be provided!!!")
-            groups = pd.read_csv(args.group, header=0, names=['samples', 'groups'])
+            groups = _read_fst_groups(args.group, gv.vcf_in.header.samples)
             data_list = []
             # list all pairwise comparisons to calculate Fst
             for pair in combinations(groups.groups.unique(), 2):
@@ -238,7 +258,7 @@ def run(args):
             if not args.group:
                 logger.error("The group file should be provided!!!")
                 raise ValueError("The group file should be provided!!!")
-            groups = pd.read_csv(args.group, header=0, names=['samples', 'groups'])
+            groups = read_assignments(args.group, available_samples=gv.vcf_in.header.samples)
             data_list = []
             # list all groups to calculate Tajima's D
             for group in groups.groups.unique():
@@ -254,7 +274,7 @@ def run(args):
                                           step=getattr(args, 'step', 1),
                                           sample_list=groups.query('groups == @group').samples.tolist(),
                                           het_threshold=args.het)
-                data_list.append(pd.DataFrame(tajima_d_data, columns=['chrom', 'start', 'end', 'counts', 'tajima_d']).assign(groups=group))
+                data_list.append(pd.DataFrame(tajima_d_data, columns=gene.TAJIMA_COLUMNS).assign(groups=group))
             data = pd.concat(data_list)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")

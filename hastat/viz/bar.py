@@ -8,7 +8,9 @@ import pandas as pd
 import numpy as np
 from matplotlib import axes
 import matplotlib.pyplot as plt
+from hastat.viz._export import save_figure
 from matplotlib.colors import LinearSegmentedColormap
+from hastat.utils.plot_data import read_sample_csv, sample_frame, select_haplotypes, merge_samples, grouped_counts
 
 
 class HapBar(object):
@@ -21,8 +23,8 @@ class HapBar(object):
         self.data = None
 
     def add_data(self, data: dict):
-        self.add_hap(pd.read_csv(data['sample_hap']), self.config['plot']['haplotypes'])
-        self.add_group(pd.read_csv(data['sample_group']))
+        self.add_hap(read_sample_csv(data['sample_hap']), self.config['plot'].get('haplotypes'))
+        self.add_group(read_sample_csv(data['sample_group']))
 
     def add_hap(self, df: pd.DataFrame, haplotypes: list = None):
         """
@@ -35,13 +37,7 @@ class HapBar(object):
         :param labels: a list contained haplotype group names to be analyzed
         :return:
         """
-        if not isinstance(df, pd.DataFrame):
-            raise ValueError("df is not a DataFrame")
-        df.columns = ['sample', 'haplotypes']
-        if haplotypes is None or len(haplotypes) == 0:
-            self.sample_hap = df
-        else:
-            self.sample_hap = df[df['haplotypes'].isin(haplotypes)]
+        self.sample_hap = select_haplotypes(sample_frame(df, 'haplotypes'), haplotypes)
 
     def add_group(self, df: pd.DataFrame):
         """
@@ -53,23 +49,16 @@ class HapBar(object):
             3. other columns are group names
         :return:
         """
-        if not isinstance(df, pd.DataFrame):
-            raise ValueError("df is not a DataFrame")
-        df.columns = ['sample'] + df.columns[1:].tolist()
-        self.sample_group = df
+        self.sample_group = sample_frame(df, 'groups')
 
     def merge_data(self):
         if self.sample_hap is None or self.sample_group is None:
             raise ValueError("hap_data or group_data is None")
-        self.data = self.sample_hap.merge(self.sample_group, how='inner', on='sample')
+        self.data = merge_samples(self.sample_hap, self.sample_group)
 
     def get_plot_data(self, name: str, calc_percentage: bool = False):
         self.merge_data()
-        data = self.data.loc[:, ['sample', 'haplotypes', name]].groupby(['haplotypes', name]).size().unstack(
-            fill_value=0)
-        if calc_percentage:
-            return data.div(data.sum())
-        return data
+        return grouped_counts(self.data, name, calc_percentage)
 
     def plot(self, ax: axes.Axes = None):
         if ax is None:
@@ -101,4 +90,4 @@ class HapBar(object):
         # Add legend
         ax.legend(loc='lower left', frameon=False,  ncol=len(data.index), bbox_to_anchor=(0., 1.02, 1., .102))
 
-        plt.savefig(self.config['plot']['save_fig'], dpi=300, bbox_inches='tight')
+        save_figure(ax.figure, self.config['plot']['save_fig'], dpi=300, bbox_inches='tight')

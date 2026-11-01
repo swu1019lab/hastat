@@ -25,8 +25,15 @@ def run(args):
         logger.error("Haplotype table file should be provided!")
         raise ValueError("Haplotype table file should be provided!")
     
+    import csv
+    with open(args.hap_table, encoding='utf-8-sig', newline='') as handle:
+        columns = next(csv.reader(handle), [])
+    if columns[:4] != ['chrom', 'pos', 'ref', 'alt'] or len(columns) < 5:
+        raise ValueError("Haplotype table must start with chrom,pos,ref,alt and contain haplotype columns")
+    if len(set(columns)) != len(columns):
+        raise ValueError("Haplotype table column names must be unique")
     hap_data = pd.read_csv(args.hap_table, header=0)
-    hap_data = hap_data.iloc[:, 4:] # exclude the first 4 columns: chrom, pos, ref, alt
+    hap_data = hap_data.iloc[:, 4:]
     logger.info(f"Loaded haplotype table with {hap_data.shape[0]} loci and {hap_data.shape[1]} haplotypes")
 
     # Initialize network analysis
@@ -37,10 +44,7 @@ def run(args):
     logger.info(f"Calculated Hamming distances for {hap_data.shape[1]} haplotypes")
 
     # Create network using specified method
-    if args.method == 'MST':
-        network.create_network(method=args.method)
-    elif args.method == 'MSN':
-        network.create_network(method=args.method, threshold_factor=args.threshold_factor)
+    network.create_network(method=args.method)
     logger.info(f"Created haplotype network using {args.method} method")
     
     # Save network data if output file specified

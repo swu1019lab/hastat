@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib import axes, patches, lines, text, ticker, collections
 from collections import defaultdict
 import matplotlib.pyplot as plt
+from hastat.viz._export import save_figure
 
 
 class HapGene(object):
@@ -425,4 +426,4 @@ class HapGene(object):
         )
         # Hide these grid behind plot objects
         ax.set_axisbelow(True)
-        plt.savefig(self.config['plot']['save_fig'], dpi=300)
+        save_figure(ax.figure, self.config['plot']['save_fig'], dpi=300)

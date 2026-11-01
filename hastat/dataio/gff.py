@@ -6,7 +6,7 @@
 
 import os
 import gffutils
-from hastat.hastat import logger
+from hastat.log.logger import logger
 
 
 def read(file_path: str) -> gffutils.FeatureDB:

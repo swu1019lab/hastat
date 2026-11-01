@@ -12,15 +12,16 @@ from .func import view, stat, plot, gwas, network
 
 
 def main():
+    from hastat import __version__
     parser = argparse.ArgumentParser(
         description='A package for gene haplotype analysis in natural populations',
         epilog="Designed on 02/22/2023 by Xiaodong Li"
     )
 
-    parser.add_argument('--version', action='version', version='%(prog)s 1.0.0')
+    parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
     parser.add_argument("--log", type=str, help="The log file name (default: stdout)")
     subparsers = parser.add_subparsers(title='subcommands', description='valid subcommands', help='additional help',
-                                       dest='command')
+                                       dest='command', required=True)
     # Add subparsers for each command
     # view command
     parser_view = subparsers.add_parser('view', help='View and analyze the haplotypes data of genes or target regions')
@@ -45,14 +46,14 @@ def main():
     parser_view.add_argument('-g', '--group', type=str,
                              help='A csv file containing the custom population groups of samples with two columns: sample name and group information')
     parser_view.add_argument('-w', '--size', type=int, default=1,
-                             help='The size of the window for pi and fst analysis (default: %(default)s) (unit: bp)')
+                             help='The size of the window for pi, fst and tajima_d analysis (default: %(default)s) (unit: bp)')
     parser_view.add_argument('-s', '--step', type=int, default=1,
-                             help='The step size of the window for pi and fst analysis (default: %(default)s) (unit: bp)')
+                             help='The step size of the window for pi, fst and tajima_d analysis (default: %(default)s) (unit: bp)')
     parser_view.add_argument('-o', '--out', type=str, help='The output prefix for result files (default: stdout)')
     parser_view.add_argument('-n', '--pop_names', type=str, nargs='+',
                             help='Population names for compare analysis (must match the number of VCF files)')
     parser_view.add_argument('--het', type=float, default=None,
-                            help='Heterozygosity rate threshold for filtering variants. Variants with heterozygosity rate greater than this value will be filtered out. 0=only homozygous sites, 1=only heterozygous sites (default: no filtering)')
+                            help='Maximum heterozygosity rate. Variants above this threshold are filtered out. 0=exclude sites with called heterozygotes, 1=allow all heterozygosity rates (default: no filtering)')
     parser_view.add_argument('--maf', type=float, default=0.0,
                             help='Minimum Minor Allele Frequency threshold. Variants with MAF less than this value will be filtered out (default: %(default)s)')
     parser_view.add_argument('--max_missing', type=float, default=1.0,
@@ -68,14 +69,15 @@ def main():
                              help='The minimum sample size for each haplotype (default: %(default)s)')
     parser_stat.add_argument('-a', '--annotate', type=str, default='gene',
                              help='The annotation of haplotypes (default: %(default)s)')
-    parser_stat.add_argument('-m', '--method', type=str, choices=['TukeyHSD', 'AllPairTest'], default='TukeyHSD',
-                             help='The method for multiple comparisons (default: %(default)s)')
+    parser_stat.add_argument('-m', '--method', type=str, choices=['TukeyHSD', 'WelchBonferroni'], default='TukeyHSD',
+                             help='TukeyHSD: equal-variance ANOVA + Tukey-Kramer; WelchBonferroni: Welch ANOVA + Welch t tests with Bonferroni correction')
+    parser_stat.add_argument('--alpha', type=float, default=0.05, help='Family-wise significance level (default: %(default)s)')
     parser_stat.add_argument('-o', '--out', type=str, help='The output csv file name (default: stdout)')
 
     # plot command with subcommands
     parser_plot = subparsers.add_parser('plot', help='Visualize gene haplotypes analysis results')
     plot_subparsers = parser_plot.add_subparsers(title='plot types', description='valid plot types', 
-                                                help='different plot types', dest='plot_type')
+                                                help='different plot types', dest='plot_type', required=True)
 
     # bar plot subcommand
     parser_bar = plot_subparsers.add_parser('bar', help='Create bar plot for haplotype distribution')
@@ -129,8 +131,10 @@ def main():
                            help='Index of phenotype column to use (default: %(default)s)')
     parser_box.add_argument('--comparisons', type=str, nargs=2, action='append',
                            help='Pairs of haplotypes for statistical comparison, e.g., --comparisons A B --comparisons A C')
-    parser_box.add_argument('--method', type=str, choices=['t-test', 'mannwhitneyu', 'welch'], default='t-test',
-                           help='Statistical test method for comparisons (default: %(default)s)')
+    parser_box.add_argument('--method', type=str, choices=['t-test', 'mannwhitneyu', 'welch', 'TukeyHSD', 'WelchBonferroni'], default='t-test',
+                           help='TukeyHSD or Bonferroni-adjusted comparisons across all eligible input groups (default: %(default)s)')
+    parser_box.add_argument('--min_hap_size', type=int, default=2,
+                           help='Minimum finite observations per group for tests; boxes remain visible (default: %(default)s)')
     parser_box.add_argument('--step_size', type=float, nargs='+',
                            help='Step sizes for comparison brackets')
     parser_box.add_argument('--haplotypes', type=str, nargs='+',
@@ -230,8 +234,6 @@ def main():
                                help='A CSV file containing the haplotype table (output from view -t table)')
     parser_network.add_argument('-m', '--method', type=str, choices=['MST', 'MSN'], default='MST',
                                help='Network construction method: MST (Minimum Spanning Tree) or MSN (Minimum Spanning Network) (default: %(default)s)')
-    parser_network.add_argument('-f', '--threshold_factor', type=float, default=1.2,
-                               help='Threshold factor for MSN method, Edges with weight <= path_weight * threshold_factor will be added (default: %(default)s)')
     parser_network.add_argument('-o', '--out', type=str, default='network',
                                help='The output prefix for network analysis results (default: %(default)s)')
 
@@ -243,7 +245,6 @@ def main():
     parser_pie.set_defaults(func=plot.run)
     parser_box.set_defaults(func=plot.run)
     parser_gene.set_defaults(func=plot.run)
-    parser_network.set_defaults(func=plot.run)
     parser_gwas.set_defaults(func=gwas.run)
     parser_network.set_defaults(func=network.run)
 

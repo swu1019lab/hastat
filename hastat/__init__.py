@@ -3,3 +3,5 @@
 # @Author  : LXD
 # @Email   : lxd1997xy@163.com
 # @File    : __init__.py.py
+
+__version__ = '1.1.0'

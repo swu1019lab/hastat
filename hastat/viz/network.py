@@ -7,11 +7,16 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from hastat.viz._export import save_figure
 import matplotlib.patches as patches
 import networkx as nx
 from matplotlib import path
-import colorsys
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.offsetbox import AnchoredOffsetbox, DrawingArea, HPacker, TextArea, VPacker
 from hastat.log.logger import logger
+from hastat.utils.network_io import read_network
+from hastat.utils.sample_data import read_sample_csv, sample_frame
+from hastat.utils.plot_data import merge_samples
 
 
 class FancyNetwork(object):
@@ -41,32 +46,20 @@ class FancyNetwork(object):
         """Load network and sample data"""
         # Load network file
         network_file = self.config['data']['file']
-        if network_file.endswith('.gexf'):
-            self.network = nx.read_gexf(network_file)
-        elif network_file.endswith('.gml'):
-            self.network = nx.read_gml(network_file)
-        elif network_file.endswith('.txt') or network_file.endswith('.edgelist'):
-            self.network = nx.read_edgelist(network_file, data=(('weight', float),), delimiter='\t')
-        else:
-            # Try to read as CSV format
-            df = pd.read_csv(network_file)
-            edge_data = df[df['type'] == 'edge']
-            self.network = nx.Graph()
-            for _, row in edge_data.iterrows():
-                self.network.add_edge(row['source'], row['target'], weight=row['weight'])
+        self.network = read_network(network_file)
         
         logger.info(f"Loaded network with {self.network.number_of_nodes()} nodes and {self.network.number_of_edges()} edges")
         
         # Load sample haplotype data
         sample_hap_file = self.config['data'].get('sample_hap')
         if sample_hap_file:
-            self.sample_hap_data = pd.read_csv(sample_hap_file)
+            self.sample_hap_data = sample_frame(read_sample_csv(sample_hap_file), 'haplotypes').rename(columns={'sample': 'samples'})
             logger.info(f"Loaded sample haplotype data: {len(self.sample_hap_data)} samples")
         
         # Load sample group data
         sample_group_file = self.config['data'].get('sample_group')
         if sample_group_file:
-            self.sample_group_data = pd.read_csv(sample_group_file)
+            self.sample_group_data = sample_frame(read_sample_csv(sample_group_file), 'groups').rename(columns={'sample': 'samples'})
             logger.info(f"Loaded sample group data: {len(self.sample_group_data)} samples")
     
     def _get_hap_composition(self):
@@ -83,18 +76,17 @@ class FancyNetwork(object):
         group_index = self.config['data'].get('group_index', 1)
         group_columns = [col for col in self.sample_group_data.columns if col != 'samples']
         
-        if group_index > len(group_columns):
-            group_index = 1
-            logger.warning(f"Group index out of range, using group index 1")
+        if (not isinstance(group_index, (int, np.integer)) or isinstance(group_index, bool)
+                or not 1 <= group_index <= len(group_columns)):
+            raise ValueError(f'group_index must be between 1 and {len(group_columns)}')
         
         group_column = group_columns[group_index - 1]
         logger.info(f"Using group column: {group_column}")
         
         # Merge sample data
-        merged_data = self.sample_hap_data.merge(
-            self.sample_group_data[['samples', group_column]], 
-            on='samples', 
-            how='inner'
+        merged_data = merge_samples(
+            self.sample_hap_data.rename(columns={'samples': 'sample'}),
+            self.sample_group_data[['samples', group_column]].rename(columns={'samples': 'sample'})
         )
         
         # Calculate composition for each haplotype
@@ -141,6 +133,9 @@ class FancyNetwork(object):
         
         if n_groups == 0:
             return colors
+        cmap = LinearSegmentedColormap.from_list(
+            'hastat_groups', ['#C5504B', '#114F8B', '#FCE988', '#90CAEE'], N=100)
+        defaults = cmap(np.linspace(0, 1, n_groups))[:, :3]
         
         # Use custom colors if provided
         if custom_colors and len(custom_colors) > 0:
@@ -154,33 +149,20 @@ class FancyNetwork(object):
                         rgb = tuple(int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4))
                         colors[group] = rgb
                     else:
-                        # Try to use named color or fallback to HSV
+                        # Try a named color or fall back to the shared palette.
                         try:
                             import matplotlib.colors as mcolors
                             rgb = mcolors.to_rgb(color_str)
                             colors[group] = rgb
                         except:
-                            # Fallback to HSV color generation
-                            hue = i / n_groups
-                            sat = 0.7
-                            val = 0.8
-                            rgb = colorsys.hsv_to_rgb(hue, sat, val)
-                            colors[group] = rgb
+                            # Keep fallback colors consistent with the other plots.
+                            colors[group] = defaults[i]
                 else:
-                    # Use HSV for remaining groups
-                    hue = i / n_groups
-                    sat = 0.7
-                    val = 0.8
-                    rgb = colorsys.hsv_to_rgb(hue, sat, val)
-                    colors[group] = rgb
+                    colors[group] = defaults[i]
         else:
-            # Use HSV color space for better color distribution (default behavior)
+            # Match the palette and sorted-group order used by Pi and other plots.
             for i, group in enumerate(groups):
-                hue = i / n_groups
-                sat = 0.7
-                val = 0.8
-                rgb = colorsys.hsv_to_rgb(hue, sat, val)
-                colors[group] = rgb
+                colors[group] = defaults[i]
         
         return colors
     
@@ -197,6 +179,10 @@ class FancyNetwork(object):
         """
         # Calculate node size based on sample count
         node_size = np.sqrt(size) * scale_factor 
+
+        # Mask underlying edges while retaining the requested sector opacity.
+        ax.scatter(*pos, s=node_size, c=[ax.get_facecolor()], alpha=1,
+                   zorder=1.5, edgecolors='none', linewidth=0)
 
         # Convert composition to arrays
         groups = sorted(list(composition.keys()))
@@ -412,67 +398,69 @@ class FancyNetwork(object):
         # Save figure
         save_fig = plot_config.get('save_fig')
         if save_fig:
-            plt.savefig(save_fig, dpi=300, bbox_inches='tight', facecolor='white')
+            save_figure(fig, save_fig, dpi=300, bbox_inches='tight', facecolor='white')
             logger.info(f"Network plot saved to: {save_fig}")
         
         # Don't call plt.show() in headless environment
         plt.close(fig)
     
     def _create_legends(self, ax, scatter):
-        """Create legends for groups and node sizes"""
-        # Group color legend
+        """Pack readable legends outside the network's plotting area."""
+        sections = []
+        font_size = 10
         if self.group_colors:
-            legend_elements = []
-            
+            rows = [TextArea('Population', textprops=dict(size=font_size, weight='bold'))]
             for group, color in self.group_colors.items():
-                legend_elements.append(patches.Patch(facecolor=color, edgecolor=color, label=str(group)))
+                swatch = DrawingArea(12, 10, 0, 0)
+                swatch.add_artist(patches.Rectangle((0, 0), 12, 10, facecolor=color,
+                    linewidth=0, alpha=self.config['plot'].get('node_alpha', .8)))
+                rows.append(HPacker(children=[swatch, TextArea(str(group), textprops=dict(size=font_size))],
+                                    pad=0, sep=6, align='center'))
+            sections.append(VPacker(children=rows, pad=0, sep=5, align='left'))
+        sizes = self._create_size_legend(ax, scatter)
+        if sizes is not None:
+            sections.append(sizes)
+        if sections:
+            self.legend_box = AnchoredOffsetbox(loc='upper left', pad=0, borderpad=0,
+                child=VPacker(children=sections, pad=0, sep=16, align='left'),
+                bbox_to_anchor=(1.03, 1), bbox_transform=ax.transAxes, frameon=False)
+            self.legend_box.set_clip_on(False)
+            ax.add_artist(self.legend_box)
 
-            logger.info(f"Group legend created with {len(legend_elements)} entries")
-            
-            # Add group legend with improved positioning
-            group_legend = ax.legend(handles=legend_elements, 
-                                   title='Population Groups',
-                                   loc='upper left',
-                                   borderaxespad=0, 
-                                   frameon=False)
-            
-            plt.setp(group_legend.get_title(), fontweight='bold')
-            ax.add_artist(group_legend)
-        
-        # Node size legend
-        self._create_size_legend(ax, scatter)
+    def _size_legend_counts(self):
+        """Use actual minimum, middle and maximum nonzero sample counts."""
+        if self.sample_hap_data is None:
+            return []
+        counts = sorted({int(self.node_sizes.get(node, 0)) for node in self.network
+                         if self.node_sizes.get(node, 0) > 0})
+        if len(counts) <= 3:
+            return counts
+        return [counts[0], counts[len(counts)//2], counts[-1]]
     
     def _create_size_legend(self, ax, scatter):
-        """Create a size legend"""
+        """Keep legend circles at exactly the same point sizes as network nodes."""
         scale_factor = self.config['plot'].get('node_scale_factor', 1.0)
         label_spacing = self.config['plot'].get('legend_label_spacing', 2)
         handle_text_pad = self.config['plot'].get('legend_handle_text_pad', 1)
-        
-        try:
-            # Generate legend
-            handles, labels = scatter.legend_elements(
-                prop="sizes", 
-                num=3,  # Show 3 different sizes
-                func=lambda s: np.round((s / scale_factor) ** 2),  # Convert area back to sample count
-                color='white',
-                markeredgecolor='gray',
-                markeredgewidth=0.5,
-            )
-            
-            # Create the legend
-            ax.legend(
-                handles, 
-                labels, 
-                loc="upper right", 
-                title="Sizes",
-                title_fontproperties=dict(weight='bold'),
-                labelspacing=label_spacing, # font-size units
-                handletextpad=handle_text_pad, # font-size units
-                frameon=False,
-            )
-            
-            logger.info(f"Size legend created with {len(labels)} entries")
-            
-        except Exception as e:
-            logger.error(f"Failed to create size legend: {e}")
-            logger.warning("Falling back to simple size indication")
+        counts = self._size_legend_counts()
+        if not counts:
+            return None
+        font_size = 10
+        diameters = np.sqrt(np.sqrt(counts) * scale_factor)
+        width = max(diameters)
+        rows = []
+        self.size_legend_markers = []
+        self.size_legend_labels = []
+        for count, diameter in zip(counts, diameters):
+            handle = DrawingArea(width + 2, diameter + 2, 0, 0)
+            circle = patches.Circle(((width + 2)/2, (diameter + 2)/2), diameter/2,
+                                    facecolor=ax.get_facecolor(), edgecolor='0.4', linewidth=.7)
+            handle.add_artist(circle)
+            label = TextArea(f'{count:,}', textprops=dict(size=font_size))
+            rows.append(HPacker(children=[handle, label], pad=0,
+                                sep=max(0, handle_text_pad)*font_size, align='center'))
+            self.size_legend_markers.append(circle)
+            self.size_legend_labels.append(label)
+        return VPacker(children=[TextArea('Samples (n)', textprops=dict(size=font_size, weight='bold')),
+            VPacker(children=rows, pad=0, sep=max(0, label_spacing)*font_size, align='left')],
+            pad=0, sep=8, align='left')

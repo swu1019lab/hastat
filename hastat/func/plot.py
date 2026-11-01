@@ -27,8 +27,7 @@ def run(args):
     # Get plot type from args
     plot_type = getattr(args, 'plot_type', None)
     if plot_type is None:
-        logger.error('No plot type specified')
-        return
+        raise ValueError('No plot type specified')
 
     # Create config dictionary from command line arguments based on plot type
     if plot_type == 'bar':
@@ -75,6 +74,7 @@ def run(args):
                 'height': args.height,
                 'comparisons': args.comparisons or [],
                 'method': args.method,
+                'min_hap_size': getattr(args, 'min_hap_size', 2),
                 'step_size': args.step_size or [],
                 'haplotypes': args.haplotypes or [],
                 'save_fig': args.output,
@@ -141,8 +141,10 @@ def run(args):
         logger.info(f'Successfully created {plot_type} plot: {config["plot"]["save_fig"]}')
     except ValueError as e:
         logger.error(f'Error creating {plot_type} plot: {e}')
+        raise
     except Exception as e:
         logger.error(f'Unexpected error creating {plot_type} plot: {e}')
+        raise
 
     end = time.time()
     logger.info("plot function runs {:.2f} seconds".format(end - start))

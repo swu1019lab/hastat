@@ -6,7 +6,7 @@
 
 import os
 from pysam import VariantFile
-from hastat.hastat import logger
+from hastat.log.logger import logger
 
 
 def read(file_path: str) -> VariantFile:

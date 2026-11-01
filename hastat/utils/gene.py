@@ -9,8 +9,16 @@ import pandas as pd
 import networkx as nx
 from collections import defaultdict
 import allel
-from scipy.spatial.distance import squareform
-from hastat.hastat import logger
+from hastat.log.logger import logger
+from hastat.utils.haplotype import normalize_loci, haplotype_outputs, count_haplotypes
+from hastat.utils.ld import ld_r_squared
+
+
+TAJIMA_COLUMNS = ['chrom', 'start', 'end', 'counts', 'tajima_d']
+TAJIMA_QC_COLUMNS = TAJIMA_COLUMNS + [
+    'n_samples', 'n_chromosomes', 'sites_used', 'sites_excluded_missing',
+    'segregating_sites',
+]
 
 
 class GeneFeature(object):
@@ -34,11 +42,13 @@ class GeneFeature(object):
         :return: a tuple containing the locus of the gene
         """
         gene = self.gff_in[gene_id]
+        if upstream < 0 or downstream < 0:
+            raise ValueError("Upstream and downstream lengths must be non-negative")
         if gene.strand == "+":
-            start = gene.start - upstream if upstream < gene.start else 0
+            start = max(1, gene.start - upstream)
             end = gene.end + downstream
         else:
-            start = gene.start - downstream if downstream < gene.start else 0
+            start = max(1, gene.start - downstream)
             end = gene.end + upstream
         return gene.seqid, start, end
 
@@ -124,277 +134,155 @@ class GeneVariant(object):
         """
         self.vcf_in = vcf_in
 
+    def _haplotype_result(self, loci, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
+        loci = normalize_loci(loci)
+        options = dict(het_threshold=het_threshold, maf_threshold=maf_threshold,
+                       max_missing_threshold=max_missing_threshold)
+        data = (self.get_geno_data(*loci[0], **options) if len(loci) == 1
+                else self.get_multi_loci_geno_data(loci, **options))
+        if data.index.has_duplicates:
+            raise ValueError("Duplicate variant records in haplotype input")
+        complete = data.isin([0, 1, 2]).all(axis=1)
+        excluded = int((~complete).sum())
+        if excluded:
+            logger.warning(f"Haplotype grouping excludes {excluded} of {len(data)} records with missing calls; "
+                           "all samples use the same complete loci")
+        return haplotype_outputs(data.loc[complete], 'Hap')
+
     def hap_table(self, chrom_name, chrom_start, chrom_end, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
-        """
-        Get haplotypes table of a gene region
-
-        :param chrom_name: chromosome name
-        :param chrom_start: chromosome start position
-        :param chrom_end: chromosome end position
-        :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param maf_threshold: Minimum Minor Allele Frequency threshold
-        :param max_missing_threshold: Maximum missing rate threshold
-        :return: a DataFrame contained haplotypes table
-        """
-        logger.info("Initializing the GeneVariant object")
-
-        df = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
-        # get unique haplotypes and their counts
-        hap, counts = np.unique(df.T.values, axis=0, return_counts=True)
-
-        # Sort haplotypes by sample count (descending order)
-        # Hap1 should have the most samples, HapN should have the least
-        sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
-        hap_sorted = hap[sorted_indices]
-
-        # haplotypes table, including name, genotype code and size
-        hap_table = pd.DataFrame(hap_sorted, columns=df.index)
-        # hap_table['size'] = _  # Could be used to add sample counts to table
-        hap_table.index = "Hap" + (hap_table.index + 1).astype(str)
-        # hap_table.index.name = 'haplotypes'
-        hap_table = hap_table.T.reset_index()
-
-        # code number should transform into code character
-        # i: chr, pos, ref, alt
-        # for i, s in hap_table.iloc[:, :-1].items():
-        #     ref, alt = i[2], i[3]
-        #     hap_table.loc[:, i] = s.map({0: ref + ref, 1: ref + alt, 2: alt + alt})
-        # hap_table.columns = hap_table.columns.droplevel(['ref', 'alt'])
-        return hap_table
+        """Return profiles on complete loci, retaining the original table columns."""
+        return self._haplotype_result([(chrom_name, chrom_start, chrom_end)],
+                                     het_threshold, maf_threshold, max_missing_threshold)[0]
 
     def multi_loci_hap_table(self, loci, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
-        """
-        Get haplotypes table from multiple regions (for homologous genes)
-
-        :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
-        :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param maf_threshold: Minimum Minor Allele Frequency threshold
-        :param max_missing_threshold: Maximum missing rate threshold
-        :return: a DataFrame contained haplotypes table
-        """
-        logger.info(f"Processing haplotype table for {len(loci)} regions")
-        
-        df = self.get_multi_loci_geno_data(loci, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
-        # get unique haplotypes and their counts
-        hap, counts = np.unique(df.T.values, axis=0, return_counts=True)
-
-        # Sort haplotypes by sample count (descending order)
-        # Hap1 should have the most samples, HapN should have the least
-        sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
-        hap_sorted = hap[sorted_indices]
-
-        # haplotypes table, including name, genotype code and size
-        hap_table = pd.DataFrame(hap_sorted, columns=df.index)
-        hap_table.index = "Hap" + (hap_table.index + 1).astype(str)
-        hap_table = hap_table.T.reset_index()
-        
-        return hap_table
+        """Return profiles across the union of requested intervals."""
+        return self._haplotype_result(loci, het_threshold, maf_threshold, max_missing_threshold)[0]
 
     def hap_groups(self, chrom_name, chrom_start, chrom_end, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
-        """
-        Get haplotypes group of a gene region
-
-        :param chrom_name: chromosome name
-        :param chrom_start: chromosome start position
-        :param chrom_end: chromosome end position
-        :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param maf_threshold: Minimum Minor Allele Frequency threshold
-        :param max_missing_threshold: Maximum missing rate threshold
-        :return: a DataFrame contained haplotypes group
-        """
-        logger.info("Initializing the GeneVariant object")
-
-        df = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
-        # get unique haplotypes, their counts and sample indices
-        _, indices, counts = np.unique(df.T.values, axis=0, return_inverse=True, return_counts=True)
-
-        # Sort haplotypes by sample count (descending order)
-        # Hap1 should have the most samples, HapN should have the least
-        sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
-        
-        # Create mapping from haplotype indices to their ranks (sorted by count)
-        count_to_rank = np.zeros(len(sorted_indices), dtype=int)
-        count_to_rank[sorted_indices] = np.arange(len(sorted_indices))
-        
-        # Remap the sample indices according to the new sorted order
-        remapped_indices = count_to_rank[indices]
-
-        # haplotypes group for each sample
-        # add haplotype labels, e.g. Hap1, Hap2, ..., HapN
-        hap_groups = pd.Series(remapped_indices, index=df.columns)
-        hap_groups = "Hap" + (hap_groups + 1).astype(str)
-        hap_groups.name = 'haplotypes'
-        return hap_groups.reset_index()
+        """Assign samples using the exact same profiles/ranks as hap_table."""
+        return self._haplotype_result([(chrom_name, chrom_start, chrom_end)],
+                                     het_threshold, maf_threshold, max_missing_threshold)[1]
 
     def multi_loci_hap_groups(self, loci, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
-        """
-        Get haplotypes group from multiple regions (for homologous genes)
-
-        :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
-        :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param maf_threshold: Minimum Minor Allele Frequency threshold
-        :param max_missing_threshold: Maximum missing rate threshold
-        :return: a DataFrame contained haplotypes group
-        """
-        logger.info(f"Processing haplotype groups for {len(loci)} regions")
-        
-        df = self.get_multi_loci_geno_data(loci, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
-        # get unique haplotypes, their counts and sample indices
-        _, indices, counts = np.unique(df.T.values, axis=0, return_inverse=True, return_counts=True)
-
-        # Sort haplotypes by sample count (descending order)
-        # Hap1 should have the most samples, HapN should have the least
-        sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
-        
-        # Replace the sample indices with their ranks (sorted by count)
-        count_to_rank = np.zeros(len(sorted_indices), dtype=int)
-        count_to_rank[sorted_indices] = np.arange(len(sorted_indices))
-        
-        # Remap the sample indices according to the new sorted order
-        remapped_indices = count_to_rank[indices]
-
-        # haplotypes group for each sample
-        hap_groups = pd.Series(remapped_indices, index=df.columns)
-        hap_groups = "Hap" + (hap_groups + 1).astype(str)
-        hap_groups.name = 'haplotypes'
-        return hap_groups.reset_index()
+        """Assign samples across the union of requested intervals."""
+        return self._haplotype_result(loci, het_threshold, maf_threshold, max_missing_threshold)[1]
 
     def calc_hap_freq(self, chrom_name, chrom_start, chrom_end, sample_groups=None, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
-        """
-        Calculate haplotypes frequency of a gene region
-
-        :param chrom_name: chromosome name
-        :param chrom_start: chromosome start position
-        :param chrom_end: chromosome end position
-        :param sample_groups: A sample group Dataframe with two columns only: samples and groups
-        :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param maf_threshold: Minimum Minor Allele Frequency threshold
-        :param max_missing_threshold: Maximum missing rate threshold
-        :return: a DataFrame contained haplotypes frequency
-        """
-        hap_groups = self.hap_groups(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
-        if sample_groups is not None:
-            return hap_groups.merge(sample_groups, how='inner', on='samples').groupby(
-                ['haplotypes', 'groups']).count().unstack(fill_value=0)
-        else:
-            return hap_groups.groupby('haplotypes').count()
+        """Return integer sample counts per profile; group-file subsets affect counts only."""
+        groups = self.hap_groups(chrom_name, chrom_start, chrom_end, het_threshold,
+                                 maf_threshold, max_missing_threshold)
+        return count_haplotypes(groups, sample_groups, list(self.vcf_in.header.samples))
 
     def calc_multi_loci_hap_freq(self, loci, sample_groups=None, het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
-        """
-        Calculate haplotypes frequency from multiple regions (for homologous genes)
-
-        :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
-        :param sample_groups: A sample group Dataframe with two columns only: samples and groups
-        :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param maf_threshold: Minimum Minor Allele Frequency threshold
-        :param max_missing_threshold: Maximum missing rate threshold
-        :return: a DataFrame contained haplotypes frequency
-        """
-        hap_groups = self.multi_loci_hap_groups(loci, het_threshold=het_threshold, maf_threshold=maf_threshold, max_missing_threshold=max_missing_threshold)
-        # get unique haplotypes and their counts
-        hap, counts = np.unique(hap_groups.T.values, axis=0, return_counts=True)
-
-        # Sort haplotypes by sample count (descending order)
-        # Hap1 should have the most samples, HapN should have the least
-        sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
-        hap_sorted = hap[sorted_indices]
-
-        # haplotypes frequency table, including name, genotype code and size
-        hap_freq_table = pd.DataFrame(hap_sorted, columns=hap_groups.index)
-        hap_freq_table.index = "Hap" + (hap_freq_table.index + 1).astype(str)
-        hap_freq_table = hap_freq_table.T.reset_index()
-
-        return hap_freq_table
+        """Count multi-region profile assignments with the same rule as single-region freq."""
+        groups = self.multi_loci_hap_groups(loci, het_threshold, maf_threshold, max_missing_threshold)
+        return count_haplotypes(groups, sample_groups, list(self.vcf_in.header.samples))
 
     def get_geno_data(self, chrom_name, chrom_start, chrom_end, code='code1', het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
-        """
-        Get genotype data within a gene region
+        """Read biallelic diploid calls whose POS lies in [start, end] (1-based).
 
-        :param chrom_name: chromosome name
-        :param chrom_start: chromosome start position
-        :param chrom_end: chromosome end position
-        :param code: genotype code, code1 or code2, default code1, code1 is presented as 0/1/2,
-                     code2 is presented as [0, 0], [0, 1] and [1, 1]
-        :param het_threshold: heterozygosity rate threshold for filtering variants
-        :param maf_threshold: Minimum Minor Allele Frequency threshold
-        :param max_missing_threshold: Maximum missing rate threshold
-        :return: a DataFrame contained genotype data
+        code1 is alternate-allele dosage (0/1/2); code2 contains two alleles.
+        Any partially missing call becomes a wholly missing genotype (-1 or
+        [-1, -1]). Filters use complete diploid calls across all VCF samples.
         """
-        allele_data_set = {'code1': defaultdict(list), 'code2': defaultdict(list)}
-        allele_data_set['code1']['index_names'] = ['chrom', 'pos', 'ref', 'alt']
-        allele_data_set['code1']['column_names'] = ['samples']
-        allele_data_set['code1']['columns'] = list(self.vcf_in.header.samples)
-        allele_data_set['code2']['index_names'] = ['chrom', 'pos', 'ref', 'alt']
-        allele_data_set['code2']['column_names'] = ['samples']
-        allele_data_set['code2']['columns'] = list(self.vcf_in.header.samples)
-        # Access snp/InDel loci
-        # 0-based, half-open
-        try:
-            _ = next(self.vcf_in.fetch(chrom_name, chrom_start, chrom_end))
-        except StopIteration:
-            logger.warning("No SNP or InDel loci existed in target region!")
-        except ValueError as e:
-            logger.error("{}".format(e))
-            logger.error("\tAn error occurred in {}:{}-{}".format(chrom_name, chrom_start, chrom_end))
-            raise e
-        else:
-            for rec in self.vcf_in.fetch(chrom_name, chrom_start, chrom_end):
-                # print(rec.chrom, rec.pos, rec.alleles)
-                # only keep bi-allelic SNP/InDel loci
-                if len(rec.alleles) != 2:
+        self._validate_region(chrom_start, chrom_end)
+        if code not in ('code1', 'code2'):
+            raise ValueError("Genotype code must be code1 or code2")
+        for name, value, upper in [('maf_threshold', maf_threshold, 0.5),
+                                   ('max_missing_threshold', max_missing_threshold, 1),
+                                   ('het_threshold', het_threshold, 1)]:
+            if value is not None and not 0 <= value <= upper:
+                raise ValueError(f"{name} must be between 0 and {upper}")
+        samples = list(self.vcf_in.header.samples)
+        if not samples:
+            raise ValueError("VCF must contain samples with diploid GT calls")
+        indices, rows = [], []
+        # pysam numeric coordinates are 0-based, half-open. GFF/VCF POS and
+        # every public hastat region are 1-based, inclusive.
+        for rec in self.vcf_in.fetch(chrom_name, chrom_start - 1, chrom_end):
+            # fetch also returns deletions overlapping from before start.
+            if not chrom_start <= rec.pos <= chrom_end:
+                continue
+            if rec.alleles is None or len(rec.alleles) != 2:
+                continue
+            if 'GT' not in rec.format:
+                raise ValueError(f"Missing GT field at {rec.chrom}:{rec.pos}")
+            pairs = []
+            for sample in samples:
+                gt = rec.samples[sample]['GT']
+                if gt is None or gt == (None,):
+                    gt = (None, None)
+                if len(gt) != 2:
+                    raise ValueError(f"Expected diploid GT at {rec.chrom}:{rec.pos}, sample {sample}")
+                if any(a is not None and a not in (0, 1) for a in gt):
+                    raise ValueError(f"Invalid biallelic GT at {rec.chrom}:{rec.pos}, sample {sample}")
+                pairs.append([-1, -1] if None in gt else list(gt))
+            dosage = [sum(gt) if gt[0] >= 0 else -1 for gt in pairs]
+            called = [g for g in dosage if g >= 0]
+            if (len(samples) - len(called)) / len(samples) > max_missing_threshold:
+                continue
+            if called:
+                af = sum(called) / (2 * len(called))
+                if min(af, 1 - af) < maf_threshold:
                     continue
-                # genotype code was represented by number, e.g. 0, 1, and 2
-                # Missing genotypes are represented by -1
-                geno_code1 = [sum(s.allele_indices) if isinstance(s.allele_indices[0], int) else -1 for s in
-                              rec.samples.values()]
-                
-                # Filter by MAF and missing rate
-                valid_genotypes = [g for g in geno_code1 if g != -1]
-                missing_count = len(geno_code1) - len(valid_genotypes)
-                missing_rate = missing_count / len(geno_code1)
-                
-                if missing_rate > max_missing_threshold:
+            elif maf_threshold > 0:
+                continue
+            if het_threshold is not None:
+                if not called or called.count(1) / len(called) > het_threshold:
                     continue
-                    
-                if len(valid_genotypes) > 0:
-                    ac = sum(valid_genotypes)
-                    an = 2 * len(valid_genotypes)
-                    af = ac / an
-                    maf = min(af, 1 - af)
-                    if maf < maf_threshold:
-                        continue
-                elif maf_threshold > 0:
-                    continue
+            indices.append((rec.chrom, rec.pos, rec.ref, rec.alts[0]))
+            rows.append(dosage if code == 'code1' else pairs)
+        index = pd.MultiIndex.from_tuples(indices, names=['chrom', 'pos', 'ref', 'alt'])
+        columns = pd.Index(samples, name='samples')
+        return pd.DataFrame(rows, index=index, columns=columns)
 
-                allele_data_set['code1']['index'].append((rec.chrom, rec.pos, rec.ref, rec.alts[0]))
-                allele_data_set['code1']['data'].append(geno_code1)
-                # genotype code was represented by paired number, e.g., [0, 0], [0, 1] and [1, 1]
-                # Missing genotypes are represented by [-1, -1]
-                geno_code2 = [list(s.allele_indices) if isinstance(s.allele_indices[0], int) else [-1, -1] for s in
-                              rec.samples.values()]
-                allele_data_set['code2']['index'].append((rec.chrom, rec.pos, rec.ref, rec.alts[0]))
-                allele_data_set['code2']['data'].append(geno_code2)
-        
-        geno_data = pd.DataFrame.from_dict(allele_data_set[code], orient='tight')
-        
-        # Apply heterozygosity filtering if threshold is provided
-        # For code2 format, we need to convert to code1, filter, then extract the same variants
-        if het_threshold is not None and not geno_data.empty:
-            if code == 'code1':
-                geno_data = self.filter_by_heterozygosity(geno_data, het_threshold)
-            elif code == 'code2':
-                # Get code1 data for filtering
-                code1_data = pd.DataFrame.from_dict(allele_data_set['code1'], orient='tight')
-                if not code1_data.empty:
-                    filtered_code1_data = self.filter_by_heterozygosity(code1_data, het_threshold)
-                    # Keep only the variants that passed filtering in code1
-                    if not filtered_code1_data.empty:
-                        geno_data = geno_data.loc[filtered_code1_data.index]
-                    else:
-                        # Return empty DataFrame with same structure if no variants pass filter
-                        geno_data = geno_data.iloc[0:0].copy()
-        
-        return geno_data
+    @staticmethod
+    def _validate_region(start, end):
+        if (not isinstance(start, (int, np.integer)) or
+                not isinstance(end, (int, np.integer)) or start < 1 or end < start):
+            raise ValueError("Regions must be 1-based inclusive with 1 <= start <= end")
+
+    @staticmethod
+    def _validate_windows(size, step):
+        if any(not isinstance(x, (int, np.integer)) or x < 1 for x in (size, step)):
+            raise ValueError("Window size and step must be positive integers")
+
+    @classmethod
+    def _population_windows(cls, start, end, size, step):
+        cls._validate_region(start, end)
+        cls._validate_windows(size, step)
+        windows = []
+        for left in range(start, end + 1, step):
+            right = min(left + size - 1, end)
+            windows.append((left, right))
+            if right == end:
+                break
+        return np.asarray(windows, dtype=int)
+
+    def _population_allele_counts(self, chrom, start, end, sample_list, het_threshold):
+        """Count chromosomes, not dosage categories, at biallelic SNPs."""
+        data = self.get_geno_data(chrom, start, end, 'code2', het_threshold=het_threshold)
+        samples = list(data.columns) if sample_list is None else list(sample_list)
+        if not samples or len(set(samples)) != len(samples):
+            raise ValueError("Population sample list must be non-empty and unique")
+        unknown = [s for s in samples if s not in data.columns]
+        if unknown:
+            raise ValueError(f"Samples not found in VCF: {', '.join(map(str, unknown))}")
+        data = data.loc[:, samples]
+        is_snp = [ref in ('A', 'C', 'G', 'T') and alt in ('A', 'C', 'G', 'T')
+                  and ref != alt for _, _, ref, alt in data.index]
+        if not all(is_snp):
+            logger.warning("Pi/Tajima's D use biallelic SNPs only; excluding non-SNP records")
+        data = data.loc[is_snp]
+        pos = data.index.get_level_values('pos').to_numpy(dtype=int)
+        if len(np.unique(pos)) != len(pos):
+            raise ValueError("Pi/Tajima's D require one biallelic SNP record per position")
+        if het_threshold is not None:
+            logger.warning("Heterozygosity filtering changes the site frequency spectrum; "
+                           "these estimates describe retained SNPs only")
+        calls = np.asarray(data.to_numpy().tolist(), dtype=np.int8).reshape(len(data), len(samples), 2)
+        ac = allel.GenotypeArray(calls).count_alleles(max_allele=1)
+        return pos, ac, 2 * len(samples)
 
     def get_multi_loci_geno_data(self, loci, code='code1', het_threshold=None, maf_threshold=0.0, max_missing_threshold=1.0):
         """
@@ -418,7 +306,8 @@ class GeneVariant(object):
         
         if not all_data:
             logger.warning("No genotype data found in any of the target regions")
-            return pd.DataFrame()
+            return pd.DataFrame(index=pd.MultiIndex.from_tuples([], names=['chrom', 'pos', 'ref', 'alt']),
+                                columns=pd.Index(self.vcf_in.header.samples, name='samples'))
         
         # Concatenate all data
         combined_data = pd.concat(all_data, axis=0)
@@ -439,16 +328,18 @@ class GeneVariant(object):
         :param het_threshold: heterozygosity rate threshold for filtering variants
         :return: a numpy array contained pi data
         """
-        logger.info(f"Calculating Pi data of {len(sample_list)} samples using sliding window method")
-        geno_data = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold)
-        if sample_list is not None:
-            data = geno_data.loc[:, geno_data.columns.isin(sample_list)].to_numpy()
-        else:
-            data = geno_data.to_numpy()
-        h = allel.HaplotypeArray(data)
-        ac = h.count_alleles()
-        pos = geno_data.index.get_level_values('pos').to_list()
-        pi, windows, n_bases, counts = allel.windowed_diversity(pos, ac, size, step=step, start=chrom_start, stop=chrom_end)
+        windows = self._population_windows(chrom_start, chrom_end, size, step)
+        pos, ac, _ = self._population_allele_counts(
+            chrom_name, chrom_start, chrom_end, sample_list, het_threshold)
+        pi, windows, n_bases, counts = allel.windowed_diversity(pos, ac, windows=windows)
+        # scikit-allel fills sites with fewer than two called alleles with zero.
+        # Such a recorded SNP is unknown, not known monomorphic: invalidate
+        # its windows instead of silently reducing diversity.
+        insufficient, _, _ = allel.windowed_statistic(
+            pos, ac.sum(axis=1) < 2, statistic=np.any, windows=windows, fill=False)
+        if np.any(insufficient):
+            pi[insufficient] = np.nan
+            logger.warning(f"Pi is NaN in {np.count_nonzero(insufficient)} windows with uncalled SNPs")
         return np.column_stack([[chrom_name] * len(windows), windows, n_bases, counts, pi])
 
     def get_multi_loci_pi_data(self, loci, size=1, step=1, sample_list=None, het_threshold=None):
@@ -490,20 +381,50 @@ class GeneVariant(object):
         :param het_threshold: heterozygosity rate threshold for filtering variants
         :return: a numpy array contained Fst data
         """
-        logger.info(
-            f"Calculating Fst data between {len(sample_list1)} and {len(sample_list2)} samples "
-            f"using sliding window method")
+        windows = self._population_windows(chrom_start, chrom_end, size, step)
+        groups = []
+        available = set(self.vcf_in.header.samples)
+        for samples in (sample_list1, sample_list2):
+            if samples is None or isinstance(samples, (str, bytes)):
+                raise ValueError("Fst populations must be non-empty sample lists")
+            samples = list(samples)
+            if not samples or len(set(samples)) != len(samples):
+                raise ValueError("Fst population sample lists must be non-empty and unique")
+            unknown = [s for s in samples if s not in available]
+            if unknown:
+                raise ValueError(f"Samples not found in VCF: {', '.join(map(str, unknown))}")
+            groups.append(samples)
+        if set(groups[0]) & set(groups[1]):
+            raise ValueError("Fst populations must not share samples")
+        logger.info(f"Calculating Fst between {len(groups[0])} and {len(groups[1])} samples")
         geno_data = self.get_geno_data(chrom_name, chrom_start, chrom_end, 'code2', het_threshold=het_threshold)
-        # Returns -1 for unmatched values
-        idx = geno_data.columns
-        index_group1 = idx.get_indexer(idx.where(idx.isin(sample_list1)).dropna())
-        index_group2 = idx.get_indexer(idx.where(idx.isin(sample_list2)).dropna())
-        sub_pops = [index_group1, index_group2]
-        pos = geno_data.index.get_level_values('pos').to_list()
-        g = allel.GenotypeArray(geno_data.to_numpy().tolist())
-        _ = np.seterr(divide='ignore')
-        # fst: shape (n_windows,), windows: shape (n_windows, 2), counts: shape (n_windows,)
-        fst, windows, counts = allel.windowed_weir_cockerham_fst(pos, g, sub_pops, size, step=step, start=chrom_start, stop=chrom_end)
+        selected = groups[0] + groups[1]
+        split = len(groups[0])
+        sub_pops = [list(range(split)), list(range(split, len(selected)))]
+        pos = geno_data.index.get_level_values('pos').to_numpy(dtype=int)
+        # Preserve counts as input biallelic-record counts, including records
+        # without enough called individuals for variance-component estimation.
+        counts = (np.searchsorted(pos, windows[:, 1], side='right') -
+                  np.searchsorted(pos, windows[:, 0], side='left'))
+        fst = np.full(len(windows), np.nan)
+        if len(geno_data):
+            calls = np.asarray(geno_data.loc[:, selected].to_numpy().tolist(), dtype=np.int8)
+            called = np.all(calls >= 0, axis=2)
+            n1, n2 = called[:, :split].sum(axis=1), called[:, split:].sum(axis=1)
+            # For two populations, WC84 requires both represented, n_bar > 1
+            # and n_C > 0. One called individual in a group is not by itself
+            # invalid when the other group has at least two.
+            usable = (n1 > 0) & (n2 > 0) & (n1 + n2 > 2)
+            excluded = int(np.count_nonzero(~usable))
+            if excluded:
+                logger.warning(f"Fst excludes {excluded} records with insufficient called samples "
+                               "for Weir-Cockerham variance components")
+            if np.any(usable):
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    fst, _, _ = allel.windowed_weir_cockerham_fst(
+                        pos[usable], allel.GenotypeArray(calls[usable]), sub_pops,
+                        windows=windows, max_allele=1)
+                fst[~np.isfinite(fst)] = np.nan
         return np.column_stack([[chrom_name] * len(windows), windows, counts, fst])
 
     def get_multi_loci_fst_data(self, loci, sample_list1: list, sample_list2: list, size=1, step=1, het_threshold=None):
@@ -531,7 +452,7 @@ class GeneVariant(object):
         
         return np.vstack(all_fst_data)
 
-    def get_tajima_d_data(self, chrom_name, chrom_start, chrom_end, size=1, step=1, sample_list=None, het_threshold=None):
+    def get_tajima_d_data(self, chrom_name, chrom_start, chrom_end, size=1, step=1, sample_list=None, het_threshold=None, include_qc=False):
         """
         Get Tajima's D data of target samples using sliding window method
 
@@ -542,22 +463,45 @@ class GeneVariant(object):
         :param step: step size
         :param sample_list: a list contained sample names
         :param het_threshold: heterozygosity rate threshold for filtering variants
-        :return: a numpy array contained Tajima's D data
-        """
-        logger.info(f"Calculating Tajima's D data of {len(sample_list) if sample_list else 'all'} samples using sliding window method")
-        geno_data = self.get_geno_data(chrom_name, chrom_start, chrom_end, het_threshold=het_threshold)
-        if sample_list is not None:
-            data = geno_data.loc[:, geno_data.columns.isin(sample_list)].to_numpy()
-        else:
-            data = geno_data.to_numpy()
-        h = allel.HaplotypeArray(data)
-        ac = h.count_alleles()
-        pos = geno_data.index.get_level_values('pos').to_list()
-        # Use chrom_start and chrom_end to define window boundaries
-        tajima_d, windows, counts = allel.windowed_tajima_d(pos, ac, size, step=step, start=chrom_start, stop=chrom_end)
-        return np.column_stack([[chrom_name] * len(windows), windows, counts, tajima_d])
+        :param include_qc: append fixed sample size, retained/excluded SNP counts,
+                           and segregating sites (TAJIMA_QC_COLUMNS)
+        :return: a numpy array with TAJIMA_COLUMNS, or TAJIMA_QC_COLUMNS
 
-    def get_multi_loci_tajima_d_data(self, loci, size=1, step=1, sample_list=None, het_threshold=None):
+        Keep the selected population fixed and exclude each SNP with any
+        missing diploid call in that population. Apply the original Tajima D
+        formula to the remaining complete sites; no variable-n approximation.
+        """
+        windows = self._population_windows(chrom_start, chrom_end, size, step)
+        pos, ac, n_chromosomes = self._population_allele_counts(
+            chrom_name, chrom_start, chrom_end, sample_list, het_threshold)
+
+        complete = ac.sum(axis=1) == n_chromosomes
+        rows = []
+        for left, right in windows:
+            first, last = np.searchsorted(pos, left), np.searchsorted(pos, right, side='right')
+            window_ac = ac[first:last][complete[first:last]]
+            counts = int(last - first)
+            used = len(window_ac)
+            excluded = counts - used
+            segregating = int(window_ac.count_segregating())
+            value = np.nan
+            if n_chromosomes >= 4 and segregating >= 3:
+                value = float(allel.tajima_d(window_ac, min_sites=3))
+                if not np.isfinite(value):
+                    value = np.nan
+            rows.append([chrom_name, int(left), int(right), counts, value,
+                         n_chromosomes // 2, n_chromosomes, used, excluded,
+                         segregating])
+        if np.any(~complete):
+            logger.warning(f"Tajima's D excludes {np.count_nonzero(~complete)} SNPs with missing "
+                           "calls in the selected population; uses complete sites with a fixed "
+                           "sample set. Non-random missingness can bias the retained spectrum.")
+        if include_qc:
+            return np.asarray(rows, dtype=object)
+        # Normal API/CLI output uses five columns; extra diagnostics are opt-in.
+        return np.asarray([row[:len(TAJIMA_COLUMNS)] for row in rows], dtype=str)
+
+    def get_multi_loci_tajima_d_data(self, loci, size=1, step=1, sample_list=None, het_threshold=None, include_qc=False):
         """
         Get Tajima's D data from multiple regions (for homologous genes)
 
@@ -572,41 +516,36 @@ class GeneVariant(object):
         
         all_tajima_d_data = []
         for chrom_name, chrom_start, chrom_end in loci:
-            tajima_d_data = self.get_tajima_d_data(chrom_name, chrom_start, chrom_end, size, step, sample_list, het_threshold)
+            tajima_d_data = self.get_tajima_d_data(chrom_name, chrom_start, chrom_end, size, step, sample_list, het_threshold, include_qc)
             if tajima_d_data.size > 0:
                 all_tajima_d_data.append(tajima_d_data)
         
         if not all_tajima_d_data:
-            return np.array([])
+            return np.empty((0, len(TAJIMA_QC_COLUMNS) if include_qc else len(TAJIMA_COLUMNS)),
+                            dtype=object if include_qc else str)
         
         return np.vstack(all_tajima_d_data)
 
     def get_ld_data(self, chrom_name, chrom_start, chrom_end):
-        """
-        Get LD data of all samples
-
-        :return: a numpy array contained LD data
-        """
-        logger.info("Calculating LD data in target region {chrom_name}:{chrom_start}-{chrom_end}")
+        """Return a square r² matrix in VCF record order (empty regions: 0 x 0)."""
+        logger.info(f"Calculating LD data in target region {chrom_name}:{chrom_start}-{chrom_end}")
         geno_data = self.get_geno_data(chrom_name, chrom_start, chrom_end, 'code1')
-        r = allel.rogers_huff_r(geno_data.to_numpy())
-        return squareform(np.power(r, 2))
+        if not geno_data.index.is_unique:
+            raise ValueError('Duplicate variant records in LD input')
+        return ld_r_squared(geno_data.to_numpy())
 
     def get_multi_loci_ld_data(self, loci):
-        """
-        Get LD data from multiple regions (for homologous genes)
+        """Return r² for sorted, merged intervals; overlapping requests count once.
 
-        :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
-        :return: a numpy array contained LD data
+        Matrix order follows get_multi_loci_geno_data(normalize_loci(loci)).
+        Distinct chromosomes are allowed, but r² is not evidence of physical linkage.
         """
+        loci = normalize_loci(loci)
         logger.info(f"Calculating LD data from {len(loci)} regions")
-        
         geno_data = self.get_multi_loci_geno_data(loci, 'code1')
-        if geno_data.empty:
-            return np.array([])
-        
-        r = allel.rogers_huff_r(geno_data.to_numpy())
-        return squareform(np.power(r, 2))
+        if not geno_data.index.is_unique:
+            raise ValueError('Duplicate variant records in LD input')
+        return ld_r_squared(geno_data.to_numpy())
 
     def get_heterozygosity_data(self, chrom_name, chrom_start, chrom_end):
         """
@@ -696,281 +635,128 @@ class GeneVariant(object):
 
 
 class MultiPopulationAnalyzer(object):
-    """
-    A class for multi-population haplotype comparison analysis
-    """
-    
+    """Compare genotype profiles on a common, complete set of VCF records."""
+
     def __init__(self, gv_list, pop_names):
-        """
-        Initialize MultiPopulationAnalyzer
-        
-        :param gv_list: list of GeneVariant objects
-        :param pop_names: list of population names
-        """
-        self.gv_list = gv_list
-        self.pop_names = pop_names
-        logger.info(f"Initialized MultiPopulationAnalyzer with {len(gv_list)} populations")
-    
+        self.gv_list, self.pop_names = list(gv_list), list(pop_names)
+        if len(self.gv_list) < 2 or len(self.gv_list) != len(self.pop_names):
+            raise ValueError("Compare requires at least two VCFs and one name per population")
+        if any(not isinstance(name, str) or not name.strip() for name in self.pop_names):
+            raise ValueError("Population names must be non-empty strings")
+        if len(set(self.pop_names)) != len(self.pop_names):
+            raise ValueError("Population names must be unique")
+        for name in self.pop_names:
+            if (name != name.strip() or name.endswith('.') or name.lower() == 'merged' or
+                    any(ch in r'<>:"/\|?*' or ord(ch) < 32 for ch in name)):
+                raise ValueError("Population names must be safe filename labels; 'merged' is reserved")
+
+    @staticmethod
+    def _merged_loci(loci):
+        return normalize_loci(loci)
+
+    @staticmethod
+    def _canonical_allele(allele):
+        # VCF sequence alleles are case-insensitive; symbolic IDs are not.
+        return allele.upper() if allele and set(allele.upper()) <= set('ACGTN') else allele
+
     def compare_populations(self, loci):
-        """
-        Perform multi-population haplotype comparison analysis
-        
-        :param loci: list of tuples containing (chrom_name, chrom_start, chrom_end)
-        :return: dictionary containing analysis results
-        """
-        logger.info("Starting multi-population haplotype comparison analysis")
-        
-        # Extract genotype data from each population
-        pop_geno_data = {}
-        all_variants = set()
-        
-        for i, (gv, pop_name) in enumerate(zip(self.gv_list, self.pop_names)):
-            logger.info(f"Processing population {pop_name}")
-            
-            # Get genotype data for current population
-            if len(loci) == 1:
-                geno_data = gv.get_geno_data(*loci[0])
-            else:
-                geno_data = gv.get_multi_loci_geno_data(loci)
-            
-            if geno_data.empty:
-                logger.warning(f"No genotype data found for population {pop_name}")
-                continue
-            
-            # Add population suffix to sample names
-            geno_data.columns = [f"{col}_{i+1}" for col in geno_data.columns]
-            
-            pop_geno_data[pop_name] = geno_data
-            all_variants.update(geno_data.index)
-            
-            logger.info(f"Population {pop_name}: {geno_data.shape[1]} samples, {geno_data.shape[0]} variants")
-        
-        # Identify core and specific variants
-        variant_presence = self._analyze_variant_presence(pop_geno_data, all_variants)
-        
-        # Generate results
-        results = {}
-        
-        # Core sites analysis (variants present in all populations)
-        core_variants = variant_presence[variant_presence['present_in_all']].index
-        if len(core_variants) > 0:
-            logger.info(f"Found {len(core_variants)} core variants shared across all populations")
-            
-            # Haplotype analysis based on core variants for each population
-            core_results = self._analyze_population_core_haplotype(pop_geno_data, core_variants)
-            results.update(core_results)
-            
-            # Haplotype analysis based on core variants for merged populations
-            merged_results = self._analyze_merged_populations_core_haplotype(pop_geno_data, core_variants)
-            results.update(merged_results)
+        loci = self._merged_loci(loci)
+        pop_geno_data, all_variants, snp_refs = {}, set(), {}
+        for i, (gv, name) in enumerate(zip(self.gv_list, self.pop_names), 1):
+            data = (gv.get_geno_data(*loci[0]) if len(loci) == 1
+                    else gv.get_multi_loci_geno_data(loci)).copy()
+            data.index = pd.MultiIndex.from_tuples(
+                [(chrom, pos, self._canonical_allele(ref), self._canonical_allele(alt))
+                 for chrom, pos, ref, alt in data.index], names=['chrom', 'pos', 'ref', 'alt'])
+            if data.index.has_duplicates:
+                raise ValueError(f"Duplicate variant records in population {name}")
+            if not data.columns.is_unique:
+                raise ValueError(f"Duplicate sample names in population {name}")
+            for chrom, pos, ref, alt in data.index:
+                if ref in ('A', 'C', 'G', 'T') and alt in ('A', 'C', 'G', 'T'):
+                    refs = snp_refs.setdefault((chrom, pos), set())
+                    refs.add(ref)
+                    if len(refs) > 1:
+                        raise ValueError(f"Incompatible SNP REF alleles at {chrom}:{pos}; "
+                                         "align reference assembly and allele orientation before compare")
+            data = data.sort_index()
+            data.columns = pd.Index([f"{sample}_{i}" for sample in data.columns], name='samples')
+            # Keep empty inputs in presence columns and sample-count summaries.
+            pop_geno_data[name] = data
+            all_variants.update(data.index)
+            logger.info(f"Population {name}: {data.shape[1]} samples, {len(data)} records")
+
+        presence = self._analyze_variant_presence(pop_geno_data, all_variants)
+        core = list(presence.index[presence['present_in_all'].to_numpy(dtype=bool)])
+        if core:
+            combined = pd.concat([data.loc[core] for data in pop_geno_data.values()], axis=1)
+            complete = combined.isin([0, 1, 2]).all(axis=1)
+            used = list(combined.index[complete])
+            excluded = len(core) - len(used)
+            if excluded:
+                logger.warning(f"Compare excludes {excluded} of {len(core)} shared records with "
+                               "missing calls; all populations use the same complete loci")
         else:
-            logger.warning("No core variants found across all populations")
-            # Add empty results for each population
-            for pop_name in self.pop_names:
-                results[f'{pop_name}_hap_table'] = pd.DataFrame()
-                results[f'{pop_name}_hap_groups'] = pd.DataFrame()
-            # Add empty results for merged populations
-            results['merged_hap_table'] = pd.DataFrame()
-            results['merged_hap_groups'] = pd.DataFrame()
+            used = []
+        logger.info(f"Compare uses {len(used)} complete shared loci for genotype-profile grouping")
+        if not used:
+            logger.warning("No complete shared loci; no haplotype assignments can be made")
 
-        # Summary and classification results
-        results['comparison_summary'] = self._generate_comparison_summary(pop_geno_data, variant_presence)
-        results['variant_class'] = variant_presence
-        
-        logger.info("Multi-population comparison analysis completed")
-        return results
-    
-    def _analyze_variant_presence(self, pop_geno_data, all_variants):
-        """
-        Analyze which variants are present in which populations
-        """
-        variant_presence = []
-        
-        for variant in all_variants:
-            presence_info = {
-                'variant': variant,
-                'chrom': variant[0],
-                'pos': variant[1],
-                'ref': variant[2],
-                'alt': variant[3]
-            }
-            
-            present_in_pops = []
-            for pop_name, geno_data in pop_geno_data.items():
-                if variant in geno_data.index:
-                    present_in_pops.append(pop_name)
-                    presence_info[f'present_in_{pop_name}'] = True
-                else:
-                    presence_info[f'present_in_{pop_name}'] = False
-            
-            presence_info['present_in_populations'] = ','.join(present_in_pops)
-            presence_info['num_populations'] = len(present_in_pops)
-            presence_info['present_in_all'] = len(present_in_pops) == len(self.pop_names)
-            presence_info['population_specific'] = len(present_in_pops) == 1
-            
-            if presence_info['population_specific']:
-                presence_info['specific_to'] = present_in_pops[0]
-            else:
-                presence_info['specific_to'] = 'None'
-            
-            variant_presence.append(presence_info)
-        
-        return pd.DataFrame(variant_presence).set_index('variant')
-    
-    def _analyze_merged_populations_core_haplotype(self, pop_geno_data, core_variants):
-        """
-        Analyze haplotypes for all merged populations using core variants only
-        """
-        logger.info(f"Analyzing merged populations with {len(core_variants)} core variants")
-        
-        # Combine core variant data from all populations
-        all_samples = []
-        core_data_list = []
-        
-        for pop_name, geno_data in pop_geno_data.items():
-            core_data = geno_data.loc[core_variants]
-            core_data_list.append(core_data)
-            all_samples.extend(geno_data.columns)
-        
-        # Combine all core data
-        combined_core_data = pd.concat(core_data_list, axis=1)
-        
-        # Generate haplotype table and groups for merged populations based on core variants
-        hap, indices, counts = np.unique(combined_core_data.T.values, axis=0, return_inverse=True, return_counts=True)
-        
-        # Sort haplotypes by sample count (descending order)
-        # MergedHap1 should have the most samples, MergedHapN should have the least
-        sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
-        hap_sorted = hap[sorted_indices]
-        
-        # Create mapping from haplotype indices to their ranks (sorted by count)
-        count_to_rank = np.zeros(len(sorted_indices), dtype=int)
-        count_to_rank[sorted_indices] = np.arange(len(sorted_indices))
-        
-        # Remap the sample indices according to the new sorted order
-        remapped_indices = count_to_rank[indices]
-        
-        # Haplotype table
-        merged_hap_table = pd.DataFrame(hap_sorted, columns=combined_core_data.index)
-        merged_hap_table.index = "MergedHap" + (merged_hap_table.index + 1).astype(str)
-        merged_hap_table = merged_hap_table.T.reset_index()
-        
-        # Haplotype groups
-        merged_hap_groups = pd.Series(remapped_indices, index=combined_core_data.columns)
-        merged_hap_groups = "MergedHap" + (merged_hap_groups + 1).astype(str)
-        merged_hap_groups.name = 'haplotypes'
-        merged_hap_groups = merged_hap_groups.reset_index()
-
-        logger.info(f"Merged populations: {len(hap)} unique haplotypes from {len(combined_core_data.columns)} samples")
-        
-        return {
-            'merged_hap_table': merged_hap_table,
-            'merged_hap_groups': merged_hap_groups
-        }
-    
-    def _analyze_population_core_haplotype(self, pop_geno_data, core_variants):
-        """
-        Analyze haplotypes within each population separately using core variants only
-        """
         results = {}
-        
-        for pop_name, geno_data in pop_geno_data.items():
-            logger.info(f"Analyzing {pop_name} haplotypes based on core variants")
-            
-            if geno_data.empty:
-                continue
-            
-            # Extract core variants data for this population
-            core_data = geno_data.loc[core_variants]
-            
-            # Generate haplotype table and groups for this population using core variants
-            hap, indices, counts = np.unique(core_data.T.values, axis=0, return_inverse=True, return_counts=True)
-            
-            # Sort haplotypes by sample count (descending order)
-            # PopHap1 should have the most samples, PopHapN should have the least
-            sorted_indices = np.argsort(counts)[::-1]  # Sort indices in descending order of counts
-            hap_sorted = hap[sorted_indices]
-            
-            # Create mapping from haplotype indices to their ranks (sorted by count)
-            count_to_rank = np.zeros(len(sorted_indices), dtype=int)
-            count_to_rank[sorted_indices] = np.arange(len(sorted_indices))
-            
-            # Remap the sample indices according to the new sorted order
-            remapped_indices = count_to_rank[indices]
-            
-            # Haplotype table
-            pop_hap_table = pd.DataFrame(hap_sorted, columns=core_data.index)
-            pop_hap_table.index = f"{pop_name}Hap" + (pop_hap_table.index + 1).astype(str)
-            pop_hap_table = pop_hap_table.T.reset_index()
-            
-            # Haplotype groups
-            pop_hap_groups = pd.Series(remapped_indices, index=core_data.columns)
-            pop_hap_groups = f"{pop_name}Hap" + (pop_hap_groups + 1).astype(str)
-            pop_hap_groups.name = 'haplotypes'
-            pop_hap_groups = pop_hap_groups.reset_index()
-            
-            results[f'{pop_name}_hap_table'] = pop_hap_table
-            results[f'{pop_name}_hap_groups'] = pop_hap_groups
-            
-            logger.info(f"Population {pop_name}: {len(np.unique(hap, axis=0))} unique haplotypes from {core_data.shape[1]} samples")
-        
+        for name, data in pop_geno_data.items():
+            table, groups = self._haplotype_outputs(data.loc[used], f"{name}Hap")
+            results[f'{name}_hap_table'], results[f'{name}_hap_groups'] = table, groups
+        combined = pd.concat([data.loc[used] for data in pop_geno_data.values()], axis=1)
+        results['merged_hap_table'], results['merged_hap_groups'] = self._haplotype_outputs(combined, 'MergedHap')
+        results['comparison_summary'] = self._generate_comparison_summary(pop_geno_data, presence)
+        results['variant_class'] = presence
         return results
-    
+
+    def _analyze_variant_presence(self, pop_geno_data, all_variants):
+        columns = ['variant', 'chrom', 'pos', 'ref', 'alt']
+        columns += [f'present_in_{name}' for name in self.pop_names]
+        columns += ['present_in_populations', 'num_populations', 'present_in_all',
+                    'population_specific', 'specific_to']
+        rows = []
+        for variant in sorted(all_variants):
+            present = [name for name in self.pop_names if variant in pop_geno_data[name].index]
+            row = dict(zip(['chrom', 'pos', 'ref', 'alt'], variant))
+            row['variant'] = variant
+            row.update({f'present_in_{name}': name in present for name in self.pop_names})
+            row.update(present_in_populations=','.join(present), num_populations=len(present),
+                       present_in_all=len(present) == len(self.pop_names),
+                       population_specific=len(present) == 1,
+                       specific_to=present[0] if len(present) == 1 else 'None')
+            rows.append(row)
+        frame = pd.DataFrame(rows, columns=columns).set_index('variant')
+        for col in [f'present_in_{name}' for name in self.pop_names] + ['present_in_all', 'population_specific']:
+            frame[col] = frame[col].astype(bool)
+        frame['num_populations'] = frame['num_populations'].astype(int)
+        return frame
+
+    @staticmethod
+    def _haplotype_outputs(data, prefix):
+        return haplotype_outputs(data, prefix)
+
     def _generate_comparison_summary(self, pop_geno_data, variant_presence):
-        """
-        Generate summary statistics for the comparison (focusing on core variants)
-        """
-        summary_data = []
-        
-        # Overall statistics
-        total_variants = len(variant_presence)
-        core_variants = len(variant_presence[variant_presence['present_in_all']])
-        
-        summary_data.append({
-            'metric': 'Total variants',
-            'value': total_variants,
-            'description': 'Total number of variants across all populations'
-        })
-        
-        summary_data.append({
-            'metric': 'Core variants',
-            'value': core_variants,
-            'description': 'Variants present in all populations (used for haplotype analysis)'
-        })
-        
-        summary_data.append({
-            'metric': 'Core variant percentage',
-            'value': round((core_variants / total_variants * 100), 2) if total_variants > 0 else 0,
-            'description': 'Percentage of variants that are core variants'
-        })
-        
-        # Population statistics
-        for pop_name, geno_data in pop_geno_data.items():
-            if geno_data.empty:
-                continue
-                
-            pop_variants = len(geno_data.index)
-            pop_samples = len(geno_data.columns)
-            
-            summary_data.extend([
-                {
-                    'metric': f'{pop_name} samples',
-                    'value': pop_samples,
-                    'description': f'Number of samples in population {pop_name}'
-                },
-                {
-                    'metric': f'{pop_name} total variants',
-                    'value': pop_variants,
-                    'description': f'Total number of variants in population {pop_name}'
-                },
-                {
-                    'metric': f'{pop_name} core variant coverage',
-                    'value': round((core_variants / pop_variants * 100), 2) if pop_variants > 0 else 0,
-                    'description': f'Percentage of core variants relative to total variants in {pop_name}'
-                }
+        total = len(variant_presence)
+        core = int(variant_presence['present_in_all'].sum())
+        rows = [
+            dict(metric='Total variants', value=total, description='Distinct biallelic records across input VCFs'),
+            dict(metric='Core variants', value=core,
+                 description='Records in every input VCF, before excluding incomplete loci for grouping'),
+            dict(metric='Core variant percentage', value=round(core / total * 100, 2) if total else 0,
+                 description='Percentage of distinct input records present in every VCF'),
+        ]
+        for name, data in pop_geno_data.items():
+            rows.extend([
+                dict(metric=f'{name} samples', value=len(data.columns), description=f'Input samples in {name}'),
+                dict(metric=f'{name} total variants', value=len(data), description=f'Input biallelic records in {name}'),
+                dict(metric=f'{name} core variant coverage',
+                     value=round(core / len(data) * 100, 2) if len(data) else 0,
+                     description=f'Shared input-record percentage in {name}'),
             ])
-        
-        return pd.DataFrame(summary_data)
+        return pd.DataFrame(rows, columns=['metric', 'value', 'description'])
 
 
 class GeneHapNetwork:
@@ -980,6 +766,11 @@ class GeneHapNetwork:
     def __init__(self):
         self.edge_data = None
         self.network = None
+        self.nodes = []
+
+    @staticmethod
+    def _node_key(node):
+        return type(node).__name__, str(node)
 
     def calc_hamming_distance(self, df: pd.DataFrame):
         """
@@ -988,22 +779,31 @@ class GeneHapNetwork:
         :param df: DataFrame with haplotypes. each row is a locus. each column is a haplotype. values are 0, 1 or 2.
         :return: a list of tuples, each tuple contains the source, target and weight of an edge
         """
-        # Get all haplotype names
-        haplotypes = df.columns.tolist()
-        # Transpose dataframe so each row represents a haplotype
-        df_t = df.T
-        
-        # Initialize edge data list
-        edges = []
-        
-        # Calculate Hamming distance between all haplotype pairs
-        for i in range(len(haplotypes)):
-            for j in range(i+1, len(haplotypes)):
-                # Calculate Hamming distance between two haplotypes
-                distance = np.sum(df_t.iloc[i] != df_t.iloc[j])
-                edges.append((haplotypes[i], haplotypes[j], distance))
-        
-        return edges
+        if not isinstance(df, pd.DataFrame) or df.shape[1] == 0:
+            raise ValueError("Haplotype table must contain at least one haplotype")
+        if not df.columns.is_unique or df.columns.hasnans:
+            raise ValueError("Haplotype names must be unique and non-missing")
+        if any(not str(name).strip() or any(c in str(name) for c in '\t\r\n') for name in df.columns):
+            raise ValueError("Haplotype names must be non-empty and contain no tab/newline")
+        haplotypes = sorted(df.columns, key=self._node_key)
+        try:
+            values = df.loc[:, haplotypes].apply(pd.to_numeric, errors='raise').to_numpy(dtype=float, na_value=np.nan)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Haplotype states must be 0, 1, 2, -1 or missing") from exc
+        if not np.all(np.isnan(values) | np.isin(values, [-1, 0, 1, 2])):
+            raise ValueError("Haplotype states must be 0, 1, 2, -1 or missing")
+        # All pairs must use the same loci, preserving an ordinary Hamming
+        # metric. Neither -1 nor NaN is a biological genotype state.
+        complete = np.all(np.isfinite(values) & (values != -1), axis=1)
+        if not np.any(complete):
+            raise ValueError("No loci with complete calls across all haplotypes")
+        excluded = int(np.count_nonzero(~complete))
+        if excluded:
+            logger.warning(f"Network distances exclude {excluded} of {len(values)} loci "
+                           "with missing calls across haplotypes")
+        values = values[complete].T
+        return [(haplotypes[i], haplotypes[j], int(np.count_nonzero(values[i] != values[j])))
+                for i in range(len(haplotypes)) for j in range(i + 1, len(haplotypes))]
 
     def add_edge(self, df: pd.DataFrame):
         """
@@ -1011,78 +811,71 @@ class GeneHapNetwork:
 
         :param df: DataFrame with haplotypes. each row is a locus. each column is a haplotype. values are 0, 1 or 2.
         """
-        self.edge_data = self.calc_hamming_distance(df)
+        edges = self.calc_hamming_distance(df)
+        self.nodes = sorted(df.columns, key=self._node_key)
+        self.edge_data = edges
+        self.network = None
+
+    def _distance_graph(self):
+        """Build a graph in canonical order, including nodes with no edges."""
+        from numbers import Real
+        if self.edge_data is None:
+            raise ValueError("No edge data available. Call add_edge() first.")
+        edges, nodes = {}, set(self.nodes)
+        for u, v, weight in self.edge_data:
+            if u == v:
+                raise ValueError("Distance edges must connect distinct nodes")
+            if not isinstance(weight, Real) or not np.isfinite(weight) or weight < 0:
+                raise ValueError("Distance weights must be finite non-negative numbers")
+            u, v = sorted((u, v), key=self._node_key)
+            if (u, v) in edges and edges[u, v] != weight:
+                raise ValueError("Conflicting duplicate distance edges")
+            edges[u, v] = weight
+            nodes.update((u, v))
+        graph = nx.Graph()
+        graph.add_nodes_from(sorted(nodes, key=self._node_key))
+        ordered = sorted(edges.items(), key=lambda item: (item[1], self._node_key(item[0][0]), self._node_key(item[0][1])))
+        graph.add_weighted_edges_from((u, v, weight) for (u, v), weight in ordered)
+        return graph
 
     def minimum_spanning_tree(self):
         """
         Construct the minimum spanning tree from distance matrix
         """
-        G = nx.Graph()
-        G.add_weighted_edges_from(self.edge_data)
-        T = nx.minimum_spanning_tree(G)
-        return T
+        return nx.minimum_spanning_tree(self._distance_graph(), algorithm='kruskal', weight='weight')
 
-    def minimum_spanning_network(self, threshold_factor=1.2):
+    def minimum_spanning_network(self):
         """
-        Construct the minimum spanning network from distance matrix
-        
-        :param threshold_factor: Threshold factor for adding edges to MSN. 
-                               Edges with weight <= path_weight * threshold_factor will be added.
-        """
-        # Use existing method to construct the minimum spanning tree
-        MST = self.minimum_spanning_tree()
-        
-        # Check for multiple connected components
-        num_components = nx.number_connected_components(MST)
-        if num_components > 1:
-            logger.info(f"Network has {num_components} disconnected components. "
-                       f"MSN will preserve this natural separation.")
-        
-        # Create MSN as a copy of MST
-        MSN = MST.copy()
-        
-        # Get all edge weights in MST for quick lookup
-        mst_edges = set()
-        for u, v, d in MST.edges(data=True):
-            mst_edges.add((min(u, v), max(u, v)))
-        
-        # Sort all edges by weight for MSN construction
-        all_edges = sorted(self.edge_data, key=lambda x: x[2])
-        
-        # For each edge not in MST, check if it should be added to MSN
-        for u, v, weight in all_edges:
-            edge = (min(u, v), max(u, v))
-            
-            # Skip if edge is already in MST
-            if edge in mst_edges:
-                continue
-                
-            # Find the shortest path weight between u and v in MST
-            try:
-                mst_path_weight = nx.shortest_path_length(MST, u, v, weight='weight')
-                
-                # If the direct edge weight is not much larger than MST path weight, add it
-                if weight <= mst_path_weight * threshold_factor:
-                    MSN.add_edge(u, v, weight=weight)
-            except nx.NetworkXNoPath:
-                # If no path exists in MST, nodes are in different connected components
-                # Do not force connection - preserve the natural structure
-                continue
-        
-        logger.info(f"MSN construction: MST has {MST.number_of_edges()} edges, "
-                   f"MSN has {MSN.number_of_edges()} edges (added {MSN.number_of_edges() - MST.number_of_edges()} edges)")
-        
-        return MSN
+        Return the union of all minimum spanning forests, retaining tied edges.
 
-    def create_network(self, method: str = "MST", **kwargs):
+        Process equal-weight edges as a batch. An edge is eligible exactly
+        when its endpoints are disconnected using strictly lighter edges.
+        Union components only after every edge in the batch has been tested.
+        """
+        from itertools import groupby
+        graph = self._distance_graph()
+        network = nx.Graph()
+        network.add_nodes_from(graph.nodes())
+        components = nx.utils.UnionFind(graph.nodes())
+        edges = sorted(graph.edges(data=True), key=lambda edge: edge[2]['weight'])
+        for _, group in groupby(edges, key=lambda edge: edge[2]['weight']):
+            batch = list(group)
+            for u, v, data in batch:
+                if components[u] != components[v]:
+                    network.add_edge(u, v, weight=data['weight'])
+            for u, v, _ in batch:
+                components.union(u, v)
+        logger.info(f"MSN contains {network.number_of_nodes()} nodes and "
+                    f"{network.number_of_edges()} edges, including equal-weight alternatives")
+        return network
+
+    def create_network(self, method: str = "MST"):
         """
         Create the network from distance matrix using different methods
 
         :param method: Method to construct the network. Available methods:
                       - "MST": Minimum Spanning Tree
                       - "MSN": Minimum Spanning Network
-        :param kwargs: Additional parameters for specific methods:
-                      - threshold_factor: for MSN (default: 1.2)
         """
         if self.edge_data is None:
             raise ValueError("No edge data available. Call add_edge() first.")
@@ -1092,8 +885,7 @@ class GeneHapNetwork:
         if method.upper() == "MST":
             self.network = self.minimum_spanning_tree()
         elif method.upper() == "MSN":
-            threshold_factor = kwargs.get('threshold_factor', 1.2)
-            self.network = self.minimum_spanning_network(threshold_factor)
+            self.network = self.minimum_spanning_network()
         else:
             available_methods = ["MST", "MSN"]
             raise ValueError(f"Invalid method: {method}. Available methods: {available_methods}")
@@ -1109,8 +901,7 @@ class GeneHapNetwork:
         from pathlib import Path
         
         if self.network is None:
-            logger.error("No network created yet. Please call create_network() first.")
-            return
+            raise ValueError("No network created yet. Please call create_network() first.")
         
         # Determine format from file extension if auto
         if format == 'auto':
@@ -1158,7 +949,12 @@ class GeneHapNetwork:
             
         elif format == 'edgelist':
             # Simple edge list format
-            with open(file_path, 'w') as f:
+            import json
+            with open(file_path, 'w', encoding='utf-8') as f:
+                for node in nx.isolates(self.network):
+                    # A comment keeps normal edge-list readers compatible;
+                    # hastat's reader restores the otherwise unrepresentable node.
+                    f.write('#node\t' + json.dumps(str(node), ensure_ascii=False) + '\n')
                 for u, v, data in self.network.edges(data=True):
                     weight = data.get('weight', 1)
                     f.write(f"{u}\t{v}\t{weight}\n")
@@ -1176,8 +972,10 @@ class GeneHapNetwork:
                     'type': 'edge'
                 })
 
-            # Convert to DataFrame and save
-            results_df = pd.DataFrame(results)
+            for node in nx.isolates(self.network):
+                results.append({'source': node, 'target': '', 'weight': '', 'type': 'node'})
+            # Existing columns also represent isolated nodes, without self-loops.
+            results_df = pd.DataFrame(results, columns=['source', 'target', 'weight', 'type'])
             results_df.to_csv(file_path, index=False)
             
         else:

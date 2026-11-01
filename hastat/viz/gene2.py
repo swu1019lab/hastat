@@ -4,18 +4,23 @@
 # @Email   : lxd1997xy@163.com
 # @File    : gene2.py
 
+import csv
 import pandas as pd
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+from hastat.viz._export import save_figure
 import matplotlib.patches as patches
 import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 import tomli
 from scipy.cluster import hierarchy
-from scipy.spatial import distance
 from hastat.log.logger import logger
 from hastat.dataio.gff import read as read_gff
 from hastat.utils.gene import GeneFeature
+from hastat.utils.window_plot_data import read_window_track
+from hastat.utils.sample_data import read_assignments
+from hastat.utils.hap_cluster import cluster_haplotypes
 
 
 class FancyGene(object):
@@ -59,6 +64,7 @@ class FancyGene(object):
         # Initialize figure and axes
         self.fig = None
         self.ax = None
+        self._count_label_layout = []
         
     def add_data(self, data: dict):
         """
@@ -90,14 +96,41 @@ class FancyGene(object):
     
     def _get_gene_config(self, gene_id):
         """Get configuration for a specific gene, falling back to default if not found."""
-        if gene_id in self.toml_config:
-            # Merge with default config
-            gene_config = self.toml_config['default'].copy()
-            gene_config.update(self.toml_config[gene_id])
-            return gene_config
-        else:
-            logger.warning(f"Gene {gene_id} not found in config, using default values")
-            return self.toml_config['default'].copy()
+        defaults = self.toml_config.get('default', {})
+        selected = self.toml_config.get(gene_id, {})
+        if not isinstance(defaults, dict) or not isinstance(selected, dict):
+            raise ValueError('Gene TOML default and gene-specific entries must be tables')
+        gene_config = dict(defaults, **selected)
+        for old, message in (
+            ('hap_group_file', 'Use hap_color_file for haplotype category colors'),
+            ('sample_hap_file', 'Use hap_file as a prefix; <prefix>.group.csv is discovered automatically'),
+        ):
+            if old in gene_config:
+                raise ValueError(f'{old} is no longer used. {message}')
+        if gene_config.get('hap_file'):
+            prefix = Path(gene_config['hap_file']).expanduser()
+            if not prefix.is_absolute():
+                prefix = Path(self.toml_file).resolve().parent / prefix
+            # Also accept an explicit .table.csv path; there is still only one input setting.
+            prefix = str(prefix)
+            if prefix.endswith('.table.csv'):
+                prefix = prefix[:-len('.table.csv')]
+            gene_config['hap_file'] = prefix + '.table.csv'
+            group_path = Path(prefix + '.group.csv')
+            if group_path.exists() or group_path.is_symlink():
+                if not group_path.is_file():
+                    raise ValueError(f'Haplotype sample groups must be a readable file: {group_path}')
+                gene_config['_hap_sample_file'] = str(group_path)
+        for name in ('ann_file', 'hap_file', 'hap_color_file', 'pi_file', 'fst_file'):
+            value = gene_config.get(name)
+            if value:
+                path = Path(value).expanduser()
+                if not path.is_absolute():
+                    path = Path(self.toml_file).resolve().parent / path
+                if not path.is_file():
+                    raise FileNotFoundError(f'Configured {name} does not exist: {path}')
+                gene_config[name] = str(path)
+        return gene_config
     
     def _extract_gene_features(self, gene_id):
         """Extract gene features (CDS, exons, UTRs) from GFF database."""
@@ -147,7 +180,7 @@ class FancyGene(object):
         if not ann_file or ann_file == "":
             return None
         try:
-            ann_data = pd.read_csv(ann_file)
+            ann_data = pd.read_csv(ann_file, dtype={'chrom': str, 'ann': str})
             logger.info(f"Loaded annotation data from {ann_file}")
             # remove nan and empty string
             if ann_data is not None:
@@ -157,83 +190,103 @@ class FancyGene(object):
             logger.info(f"detected {len(ann_data)} variant annotations")
             return ann_data
         except Exception as e:
-            logger.warning(f"Failed to load annotation file {ann_file}: {e}")
-            return None
+            raise ValueError(f"Failed to load annotation file {ann_file}: {e}") from e
     
     def _load_haplotype_data(self, hap_file, hap_cols=None):
         """Load haplotype data from CSV file."""
         if not hap_file or hap_file == "":
             return None
         try:
-            hap_data = pd.read_csv(hap_file)
+            with open(hap_file, encoding='utf-8-sig', newline='') as stream:
+                header = next(csv.reader(stream), [])
+            meta = ['chrom', 'pos', 'ref', 'alt']
+            if not set(meta).issubset(header) or len(header) != len(set(header)) or any(not name.strip() for name in header):
+                raise ValueError('Haplotype table requires chrom,pos,ref,alt and unique nonempty column names')
+            hap_data = pd.read_csv(hap_file, dtype=str, keep_default_na=False)
+            if hap_data[meta].apply(lambda col: col.str.strip().eq('')).any().any():
+                raise ValueError('Haplotype variant identifiers must be nonempty')
+            positions = pd.to_numeric(hap_data['pos'], errors='raise')
+            if not (np.isfinite(positions) & (positions >= 1) & (positions == np.floor(positions))).all():
+                raise ValueError('Haplotype positions must be positive integers')
+            hap_data['pos'] = positions.astype('int64')
+            if hap_data.duplicated(meta).any():
+                raise ValueError('Duplicate variant records in haplotype table')
+            all_haps = [col for col in header if col not in meta]
+            for hap in all_haps:
+                values = hap_data[hap].replace({'': '-1', 'NA': '-1', 'NaN': '-1', 'nan': '-1'})
+                values = pd.to_numeric(values, errors='raise')
+                if not values.isin([-1, 0, 1, 2]).all():
+                    raise ValueError('Haplotype genotypes must be -1 (missing), 0, 1 or 2')
+                hap_data[hap] = values.astype('int8')
             logger.info(f"Loaded haplotype data from {hap_file}")
             if isinstance(hap_cols, list) and len(hap_cols) > 0:
                 hap_data = hap_data.loc[:, ['chrom', 'pos', 'ref', 'alt'] + hap_cols]
+            hap_data.attrs['all_haplotypes'] = all_haps
             logger.info(f"detected {len(hap_data.columns) - 4} haplotypes with {len(hap_data)} variant sites")
             return hap_data
         except Exception as e:
-            logger.warning(f"Failed to load haplotype file {hap_file}: {e}")
-            return None
+            raise ValueError(f"Failed to load haplotype file {hap_file}: {e}") from e
     
     def _load_haplotype_group_data(self, group_file):
         """Load haplotype group data from CSV file."""
         if not group_file or group_file == "":
             return None
         try:
-            group_data = pd.read_csv(group_file, header=None)
+            group_data = pd.read_csv(group_file, header=None, dtype=str, keep_default_na=False)
             # Assuming 2 columns: haplotype, group
-            if len(group_data.columns) >= 2:
-                group_data.columns = ['haplotype', 'group'] + list(group_data.columns[2:])
+            if len(group_data.columns) == 2:
+                group_data.columns = ['haplotype', 'group']
+                group_data = group_data.apply(lambda col: col.str.strip())
+                if group_data.eq('').any().any() or group_data.haplotype.duplicated().any():
+                    raise ValueError('hap_color_file requires one nonempty category per unique haplotype; duplicate ID found or empty value')
                 logger.info(f"Loaded haplotype group data from {group_file}")
                 return group_data
             else:
-                logger.warning(f"Invalid group file format: {group_file}")
-                return None
+                raise ValueError(f"Invalid group file format: {group_file}")
         except Exception as e:
-            logger.warning(f"Failed to load group file {group_file}: {e}")
-            return None
+            raise ValueError(f"Failed to load group file {group_file}: {e}") from e
     
-    def _coordinate_transform(self, pos, bbox, gene_start, gene_end):
-        """Transform genomic coordinates to plot coordinates based on bbox."""
-        x_start, y_start, width, height = bbox
-        # Transform genomic position to relative position within gene
-        relative_pos = (pos - gene_start) / (gene_end - gene_start)
-        # Transform to plot coordinates
-        plot_x = x_start + relative_pos * width
-        return plot_x
+    def _physical_frame(self, gene_config, bbox):
+        """Horizontal frame shared by all tracks using physical genomic positions."""
+        x, y, width, height = bbox
+        xy = gene_config.get('xy', [0, 0.5])
+        span = gene_config.get('width', 1.0)
+        if not np.isfinite(span) or span <= 0:
+            raise ValueError('Gene width must be finite and positive')
+        return x + xy[0] * width, y + xy[1] * height, span * width, gene_config.get('height', 0.2) * height
+
+    def _coordinate_transform(self, pos, bbox, region_start, region_end):
+        """Map base centers/edges on a 1-based inclusive region, including one base."""
+        x, _, width, _ = bbox
+        return x + (pos - (region_start - 0.5)) / (region_end - region_start + 1) * width
     
     def _draw_gene_structure(self, gene_data, gene_config, bbox):
         """Draw gene structure features (CDS, exons, UTRs)."""
         x_start, y_start, bbox_width, bbox_height = bbox
-        xy = gene_config.get('xy', [0, 0.5])
-        width = gene_config.get('width', 1.0)
-        height = gene_config.get('height', 0.2)
         color = gene_config.get('color', 'C1')
         feature_type = gene_config.get('feature', 'CDS')
         gene_label_size = gene_config.get('gene_label_size', 10)
         gene_label_show = gene_config.get('gene_label_show', True)
         
         # Calculate absolute coordinates
-        abs_x = x_start + xy[0] * bbox_width
-        abs_y = y_start + xy[1] * bbox_height
-        abs_width = width * bbox_width
-        abs_height = height * bbox_height
+        frame = self._physical_frame(gene_config, bbox)
+        abs_x, abs_y, abs_width, abs_height = frame
         
         gene_start = gene_data['gene_start']
         gene_end = gene_data['gene_end']
+        region_start, region_end = gene_data['start'], gene_data['end']
+        gene_left = self._coordinate_transform(gene_start - 0.5, frame, region_start, region_end)
+        gene_right = self._coordinate_transform(gene_end + 0.5, frame, region_start, region_end)
         
         # Draw selected features
         features_to_draw = gene_data.get(feature_type, [])
         if len(features_to_draw) == 0:
             logger.warning(f"No {feature_type} features found! Please check the GFF file and toml file.")
         for feature_start, feature_end in features_to_draw:
-            # Calculate relative positions
-            rel_start = (feature_start - gene_start) / (gene_end - gene_start)
-            rel_end = (feature_end - gene_start) / (gene_end - gene_start)
-            
-            # Draw feature rectangle
-            feature_x = abs_x + rel_start * abs_width
-            feature_width = (rel_end - rel_start) * abs_width
+            # Inclusive features occupy their full base cells, even if start == end.
+            feature_x = self._coordinate_transform(feature_start - 0.5, frame, region_start, region_end)
+            feature_right = self._coordinate_transform(feature_end + 0.5, frame, region_start, region_end)
+            feature_width = feature_right - feature_x
             
             feature_rect = patches.Rectangle(
                 (feature_x, abs_y - abs_height/2),
@@ -243,15 +296,13 @@ class FancyGene(object):
             )
             self.ax.add_patch(feature_rect)
         
-        # Draw strand arrow if gene has features
+        # Keep the strand line behind the opaque feature blocks.
         if len(features_to_draw) > 0:
             arrow_y = abs_y
-            arrow_extension = abs_width * 0.05  # arrow extension length: 5% of the gene width
-            
             if gene_data['strand'] == '+':
                 # + strand: arrow from the start of the gene to the end of the gene
-                arrow_start = abs_x - arrow_extension
-                arrow_end = abs_x + abs_width + arrow_extension
+                arrow_start = gene_left
+                arrow_end = gene_right
                 arrow = patches.FancyArrowPatch(
                     (arrow_start, arrow_y), (arrow_end, arrow_y),
                     arrowstyle='->', mutation_scale=15, color='black', 
@@ -259,20 +310,57 @@ class FancyGene(object):
                 )
             else:
                 # - strand: arrow from the end of the gene to the start of the gene
-                arrow_start = abs_x + abs_width + arrow_extension
-                arrow_end = abs_x - arrow_extension
+                arrow_start = gene_right
+                arrow_end = gene_left
                 arrow = patches.FancyArrowPatch(
                     (arrow_start, arrow_y), (arrow_end, arrow_y),
                     arrowstyle='->', mutation_scale=15, color='black', 
                     alpha=0.6, zorder=1
                 )
             self.ax.add_patch(arrow)
+            # Put visible direction heads in uncovered gaps, never over features.
+            merged = []
+            for left, right in sorted(features_to_draw):
+                if merged and left <= merged[-1][1] + 1:
+                    merged[-1][1] = max(merged[-1][1], right)
+                else:
+                    merged.append([left, right])
+            visible_directions = 0
+            for first, second in zip(merged, merged[1:]):
+                left = self._coordinate_transform(first[1] + .5, frame, region_start, region_end)
+                right = self._coordinate_transform(second[0] - .5, frame, region_start, region_end)
+                pixels = abs(self.ax.transData.transform((right, abs_y))[0] -
+                             self.ax.transData.transform((left, abs_y))[0])
+                if pixels * 72 / self.fig.dpi < 12:
+                    continue
+                start, end = left + .2*(right-left), right - .2*(right-left)
+                if gene_data['strand'] == '-':
+                    start, end = end, start
+                direction = patches.FancyArrowPatch((start, abs_y), (end, abs_y),
+                    arrowstyle='->', mutation_scale=12, color='black', linewidth=.9,
+                    shrinkA=0, shrinkB=0, alpha=.8, zorder=1)
+                direction.set_gid('strand-direction')
+                self.ax.add_patch(direction)
+                visible_directions += 1
+            if not visible_directions:
+                # Single-feature or tightly packed genes still need an orientation.
+                sign = 1 if gene_data['strand'] == '+' else -1
+                center = ((gene_left + gene_right)/2, abs_y + abs_height/2)
+                marker = self.ax.annotate('', xy=center,
+                    xycoords=mpl.transforms.offset_copy(self.ax.transData,
+                        fig=self.fig, x=12*sign, y=24, units='points'),
+                    xytext=center, textcoords=mpl.transforms.offset_copy(self.ax.transData,
+                        fig=self.fig, x=-12*sign, y=24, units='points'),
+                    arrowprops=dict(arrowstyle='->', color='black', linewidth=.9,
+                                    shrinkA=0, shrinkB=0, relpos=(0, .5)),
+                    annotation_clip=False)
+                marker.set_gid('strand-direction')
         
         # Add gene name label
         if gene_label_show:
             self.ax.annotate(
                 gene_data['gene_id'],
-                xy=(abs_x + abs_width/2, abs_y + abs_height/2),
+                xy=((gene_left + gene_right)/2, abs_y + abs_height/2),
                 xytext=(0, 5),
                 textcoords='offset points',
                 ha='center', va='bottom', fontsize=gene_label_size, weight='bold',
@@ -297,8 +385,8 @@ class FancyGene(object):
         abs_x, abs_y, abs_width, abs_height = gene_coords
         
         # Filter annotations for this gene region
-        gene_start = gene_data['gene_start']
-        gene_end = gene_data['gene_end']
+        gene_start = gene_data['start']
+        gene_end = gene_data['end']
         chrom = gene_data['chrom']
         
         # Assuming annotation data has columns: chrom, pos, ann
@@ -327,8 +415,7 @@ class FancyGene(object):
             color = anno_colors[i % len(anno_colors)]
             
             # Calculate x position on gene
-            rel_pos = (pos - gene_start) / (gene_end - gene_start)
-            original_x = abs_x + rel_pos * abs_width
+            original_x = self._coordinate_transform(pos, gene_coords, gene_start, gene_end)
             
             annotations.append({
                 'pos': pos,
@@ -434,9 +521,15 @@ class FancyGene(object):
         hap_label_show = gene_config.get('hap_label_show', True)
         hap_label_size = gene_config.get('hap_label_size', 8)
         hap_cols = gene_config.get('hap_cols', [])
+        sample_hap_file = gene_config.get('_hap_sample_file', '')
+        count_show = gene_config.get('hap_count_show', bool(sample_hap_file))
+        if not isinstance(count_show, bool):
+            raise ValueError('hap_count_show must be true or false')
+        assignments = read_assignments(sample_hap_file, label='haplotypes') if sample_hap_file else None
+        hap_counts = assignments.haplotypes.value_counts().to_dict() if count_show and assignments is not None else None
         
         # New config options
-        hap_group_file = gene_config.get('hap_group_file', '')
+        hap_color_file = gene_config.get('hap_color_file', '')
         hap_freq_show = gene_config.get('hap_freq_show', True)
         hap_freq_height = gene_config.get('hap_freq_height', 0.05)
         hap_freq_y = gene_config.get('hap_freq_y', 0)
@@ -446,12 +539,16 @@ class FancyGene(object):
         
         # Clustering config
         hap_cluster_show = gene_config.get('hap_cluster_show', False)
-        hap_cluster_linkage = gene_config.get('hap_cluster_linkage', 'ward')
+        hap_cluster_linkage = gene_config.get('hap_cluster_linkage', 'average')
         hap_cluster_width = gene_config.get('hap_cluster_width', 0.1)
         
         hap_data = self._load_haplotype_data(hap_file, hap_cols)
         if hap_data is None:
             return
+        if assignments is not None:
+            unknown = sorted(set(assignments.haplotypes) - set(hap_data.attrs['all_haplotypes']))
+            if unknown:
+                raise ValueError('Sample assignments contain haplotypes absent from the table: ' + ', '.join(unknown))
 
         # Filter haplotypes and variants
         hap_het_rate = gene_config.get('hap_het_rate', [0, 1])
@@ -540,7 +637,7 @@ class FancyGene(object):
             return
 
         # Load group data
-        group_data = self._load_haplotype_group_data(hap_group_file)
+        group_data = self._load_haplotype_group_data(hap_color_file)
         group_info = {} # hap -> group
         if group_data is not None:
             for _, row in group_data.iterrows():
@@ -564,30 +661,24 @@ class FancyGene(object):
             if group_info:
                 hap_cols = [hap for hap in hap_cols if hap in group_info]
 
+        if not hap_cols:
+            logger.warning('No haplotypes left to display after group selection')
+            return
+        if assignments is not None:
+            assigned_haps = set(assignments.haplotypes)
+            missing = [hap for hap in hap_cols if hap not in assigned_haps]
+            if missing:
+                raise ValueError('No sample assignments for displayed haplotypes: ' + ', '.join(missing))
+        hap_labels = {hap: f'{hap} (n={int(hap_counts[hap])})' if hap_counts is not None else hap
+                      for hap in hap_cols}
+
         # Sort gene_hap by position to ensure consistent column order
         gene_hap_sorted = gene_hap.sort_values('pos')
 
         # Perform clustering if enabled
         Z = None
-        if hap_cluster_show and len(hap_cols) > 2:
-            X = gene_hap_sorted[hap_cols].T.values
-            try:
-                # Calculate Hamming distance
-                dist_matrix = distance.pdist(X, metric='hamming')
-                
-                # Perform hierarchical clustering
-                Z = hierarchy.linkage(dist_matrix, method=hap_cluster_linkage)
-                
-                # Get ordered leaves
-                dendro = hierarchy.dendrogram(Z, no_plot=True)
-                leaves = dendro['leaves']
-                
-                # Reorder hap_cols
-                hap_cols = [hap_cols[i] for i in leaves]
-                
-            except Exception as e:
-                logger.warning(f"Clustering failed: {e}")
-                Z = None
+        if hap_cluster_show:
+            hap_cols, Z = cluster_haplotypes(gene_hap_sorted, hap_cols, hap_cluster_linkage)
 
         # Calculate layout
         num_freq_tracks = 0
@@ -637,6 +728,7 @@ class FancyGene(object):
                 self.ax.add_patch(rect)
         
         # Draw labels and group bars
+        label_artists, group_bar_artists, dendrogram_artists = [], [], []
         if group_info:
             # Group colors
             unique_groups = sorted(list(set(group_info.values())))
@@ -659,23 +751,24 @@ class FancyGene(object):
                     facecolor=color, edgecolor=None, linewidth=0
                 )
                 self.ax.add_patch(rect)
+                group_bar_artists.append(rect)
                 
                 # Draw hap label
                 if hap_label_show:
                     label_y = hap_abs_y + i * cell_height + cell_height/2
-                    self.ax.text(
+                    label_artists.append(self.ax.text(
                         hap_abs_x - 0.02, label_y,
-                        hap, ha='right', va='center', fontsize=hap_label_size
-                    )
+                        hap_labels[hap], ha='right', va='center', fontsize=hap_label_size
+                    ))
         else:
             # Add haplotype labels on the left
             if hap_label_show:
                 for hap_idx, hap_col in enumerate(hap_cols):
                     label_y = hap_abs_y + hap_idx * cell_height + cell_height/2
-                    self.ax.text(
+                    label_artists.append(self.ax.text(
                         hap_abs_x - 0.02, label_y,
-                        hap_col, ha='right', va='center', fontsize=hap_label_size
-                    )
+                        hap_labels[hap_col], ha='right', va='center', fontsize=hap_label_size
+                    ))
         
         # Draw dendrograms
         if hap_cluster_show and Z is not None:
@@ -700,7 +793,10 @@ class FancyGene(object):
             
             # Plot lines
             for xs, ys in zip(x_coords, y_coords):
-                self.ax.plot(xs, ys, color='black', linewidth=0.5)
+                dendrogram_artists.extend(self.ax.plot(xs, ys, color='black', linewidth=0.5))
+
+        if label_artists:
+            self._count_label_layout.append((label_artists, group_bar_artists, dendrogram_artists))
 
         # Draw frequency tracks
         if hap_freq_show:
@@ -724,24 +820,37 @@ class FancyGene(object):
                                        hap_abs_x, hap_abs_y, hap_abs_height, 
                                        cell_width)
     
+    def _fit_haplotype_count_labels(self):
+        """Keep group bars/trees left of the measured count labels without shrinking the matrix."""
+        if not self._count_label_layout:
+            return
+        self.fig.canvas.draw()
+        renderer = self.fig.canvas.get_renderer()
+        padding = self.fig.dpi * 4 / 72  # four points, independent of export resolution
+        for labels, bars, tree in self._count_label_layout:
+            decorations = bars if bars else tree
+            if not decorations:
+                continue
+            label_left = min(label.get_window_extent(renderer).x0 for label in labels)
+            right = max(artist.get_window_extent(renderer).x1 for artist in decorations)
+            shift_pixels = min(0., label_left - padding - right)
+            if shift_pixels == 0:
+                continue
+            inverse = self.ax.transData.inverted()
+            shift = inverse.transform((shift_pixels, 0))[0] - inverse.transform((0, 0))[0]
+            for bar in bars:
+                bar.set_x(bar.get_x() + shift)
+                bar.set_clip_on(False)
+            for line in tree:
+                line.set_xdata(np.asarray(line.get_xdata()) + shift)
+                line.set_clip_on(False)
+
     def _draw_haplotype_connections(self, gene_data, gene_hap_sorted, bbox, 
                                   hap_abs_x, hap_abs_y, hap_abs_height, cell_width):
         """Draw connecting lines from haplotype columns to gene variant positions."""
-        x_start, y_start, bbox_width, bbox_height = bbox
-        gene_start = gene_data['gene_start']
-        gene_end = gene_data['gene_end']
-        
-        # Calculate gene region coordinates (same as in _draw_gene_structure)
         gene_config = self._get_gene_config(gene_data['gene_id'])
-        xy = gene_config.get('xy', [0, 0.5])
-        width = gene_config.get('width', 1.0)
-        height = gene_config.get('height', 0.2)
-        
-        # Calculate absolute coordinates for gene
-        gene_abs_x = x_start + xy[0] * bbox_width
-        gene_abs_y = y_start + xy[1] * bbox_height
-        gene_abs_width = width * bbox_width
-        gene_abs_height = height * bbox_height
+        frame = self._physical_frame(gene_config, bbox)
+        _, gene_abs_y, _, gene_abs_height = frame
         
         # Draw connection lines for each variant site
         for site_idx, (_, row) in enumerate(gene_hap_sorted.iterrows()):
@@ -752,14 +861,12 @@ class FancyGene(object):
             hap_column_y_top = hap_abs_y + hap_abs_height  # Top of haplotype matrix
             
             # Position on gene (variant location)
-            rel_pos = (pos - gene_start) / (gene_end - gene_start)
-            gene_variant_x = gene_abs_x + rel_pos * gene_abs_width
-            gene_variant_y = gene_abs_y - gene_abs_height  # Bottom of gene
+            gene_variant_x = self._coordinate_transform(pos, frame, gene_data['start'], gene_data['end'])
+            gene_variant_y = gene_abs_y - gene_abs_height/2  # Bottom edge of features
             
             # Draw connecting line: diagonal line first, then vertical line to gene bottom
             # Connection height is half the distance between haplotype top and gene bottom
-            connection_height = abs(gene_variant_y - hap_column_y_top) * 0.5
-            intermediate_y = gene_variant_y - connection_height
+            intermediate_y = (gene_variant_y + hap_column_y_top) / 2
 
             # Diagonal line from haplotype column to intermediate point
             self.ax.plot([hap_column_x, gene_variant_x], 
@@ -772,241 +879,76 @@ class FancyGene(object):
                         color='gray', alpha=0.6, linewidth=1, linestyle='-')
 
     def _load_pi_data(self, pi_file):
-        """Load pi data from CSV file."""
-        if not pi_file or pi_file == "":
-            return None
-        try:
-            pi_data = pd.read_csv(pi_file)
-            logger.info(f"Loaded pi data from {pi_file}")
-            logger.info(f"Detected {len(pi_data)} pi data points")
-            return pi_data
-        except Exception as e:
-            logger.warning(f"Failed to load pi file {pi_file}: {e}")
-            return None
-    
+        return read_window_track(pi_file, 'pi') if pi_file else None
+
     def _load_fst_data(self, fst_file):
-        """Load fst data from CSV file."""
-        if not fst_file or fst_file == "":
-            return None
-        try:
-            fst_data = pd.read_csv(fst_file)
-            logger.info(f"Loaded fst data from {fst_file}")
-            logger.info(f"Detected {len(fst_data)} fst data points")
-            return fst_data
-        except Exception as e:
-            logger.warning(f"Failed to load fst file {fst_file}: {e}")
-            return None
-    
+        return read_window_track(fst_file, 'fst') if fst_file else None
+
     def _draw_pi_plot(self, gene_data, gene_config, bbox):
-        """Draw pi data plot using inset axes."""
-        pi_file = gene_config.get('pi_file', '')
-        pi_y = gene_config.get('pi_y', 0.55)
-        pi_height = gene_config.get('pi_height', 0.2)
-        pi_style = gene_config.get('pi_style', 'fill')
-        pi_cmap = LinearSegmentedColormap.from_list('pi_cmap', ['#C5504B', '#114F8B', '#FCE988', '#90CAEE'], N=100)
-        
-        pi_data = self._load_pi_data(pi_file)
-        if pi_data is None or pi_data.empty:
-            return None
-        
-        x_start, y_start, bbox_width, bbox_height = bbox
-        
-        # Filter pi data for this gene region
-        chrom_start = gene_data['start']
-        chrom_end = gene_data['end']
-        chrom = gene_data['chrom']
-        
-        if 'chrom' in pi_data.columns:
-            gene_pi = pi_data[
-                (pi_data['chrom'] == chrom) & 
-                (pi_data['start'] >= chrom_start) & 
-                (pi_data['end'] <= chrom_end)
-            ].copy()
-        else:
-            gene_pi = pi_data[
-                (pi_data['start'] >= chrom_start) & 
-                (pi_data['end'] <= chrom_end)
-            ].copy()
-        
-        if gene_pi.empty:
-            logger.warning(f"Empty pi data within {chrom}:{chrom_start}-{chrom_end}")
-            return None
+        return self._draw_window_track(gene_data, gene_config, bbox, 'pi')
 
-        # Calculate genomic positions (center of each window)
-        gene_pi['pos_bp'] = (gene_pi['start'] + gene_pi['end']) / 2
-        
-        # Convert pi values to scientific notation (multiply by 1000 for 10^-3 scale)
-        gene_pi['pi_scaled'] = gene_pi['pi'] * 1000
-        
-        # Create inset axes for pi plot
-        pi_bounds = [x_start, y_start + pi_y * bbox_height, bbox_width, pi_height * bbox_height]
-        pi_ax = self.ax.inset_axes(pi_bounds, transform=self.ax.transData)
-        
-        # Draw plots based on style and groups
-        legend_handles = []
-        
-        if 'groups' in gene_pi.columns:
-            groups = sorted(gene_pi['groups'].unique())
-            colors = pi_cmap(np.linspace(0, 1, len(groups)))
-            
-            for i, group in enumerate(groups):
-                group_data = gene_pi[gene_pi['groups'] == group].sort_values('pos_bp')
-                if group_data.empty:
-                    continue
-                
-                color = colors[i]
-                
-                if pi_style == 'fill':
-                    # Fill between style
-                    pi_ax.fill_between(group_data['pos_bp'], 0, group_data['pi_scaled'], 
-                                     color=color, alpha=0.6, label=group)
-                    line = pi_ax.plot(group_data['pos_bp'], group_data['pi_scaled'], 
-                                    color=color, linewidth=1, alpha=0.8, label=group)[0]
-                else:
-                    # Line only style
-                    line = pi_ax.plot(group_data['pos_bp'], group_data['pi_scaled'], 
-                                    color=color, linewidth=1, label=group)[0]
-                
-                legend_handles.append(line)
-        else:
-            # Single group
-            sorted_data = gene_pi.sort_values('pos_bp')
-            color = 'C0'
-            
-            if pi_style == 'fill':
-                pi_ax.fill_between(sorted_data['pos_bp'], 0, sorted_data['pi_scaled'], 
-                                 color=color, alpha=0.6, label='π')
-                line = pi_ax.plot(sorted_data['pos_bp'], sorted_data['pi_scaled'], 
-                                color=color, linewidth=1, alpha=0.8, label='π')[0]
-            else:
-                line = pi_ax.plot(sorted_data['pos_bp'], sorted_data['pi_scaled'], 
-                                color=color, linewidth=1, label='π')[0]
-            
-            legend_handles = [line]
-        
-        # Configure pi axes
-        x_min, x_max = np.min(gene_pi['pos_bp']), np.max(gene_pi['pos_bp'])
-        pi_ax.set_xlim(x_min, x_max)
-        pi_ax.set_ylabel(r'π ($10^{-3}$)', fontsize=8)
-        
-        # Set custom x-axis ticks only at min and max values
-        pi_ax.set_xticks([x_min, x_max])
-        pi_ax.set_xticklabels([f'{int(x_min):,}', f'{int(x_max):,}'])
-        pi_ax.tick_params(axis='both', labelsize=6)
-        pi_ax.spines[["top", "right"]].set_visible(False)
-        
-        # Add legend
-        if legend_handles:
-            pi_ax.legend(legend_handles, [h.get_label() for h in legend_handles],
-                        bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-                        mode='expand', borderaxespad=0., ncol=3, fontsize=6, frameon=False)
-        
-        return legend_handles
-    
     def _draw_fst_plot(self, gene_data, gene_config, bbox):
-        """Draw fst data plot using inset axes."""
-        fst_file = gene_config.get('fst_file', '')
-        fst_y = gene_config.get('fst_y', 0.8)
-        fst_height = gene_config.get('fst_height', 0.2)
-        fst_style = gene_config.get('fst_style', 'fill')
-        fst_cmap = LinearSegmentedColormap.from_list('fst_cmap', ['#C5504B', '#114F8B', '#FCE988', '#90CAEE'], N=100)
+        return self._draw_window_track(gene_data, gene_config, bbox, 'fst')
 
-        fst_data = self._load_fst_data(fst_file)
-        if fst_data is None or fst_data.empty:
+    def _draw_window_track(self, gene_data, gene_config, bbox, statistic):
+        """Draw existing window estimates with literal labels and visible points."""
+        path = gene_config.get(f'{statistic}_file', '')
+        frame = self._load_pi_data(path) if statistic == 'pi' else self._load_fst_data(path)
+        if frame is None or frame.empty:
             return None
-        
-        x_start, y_start, bbox_width, bbox_height = bbox
-        
-        # Filter fst data for this gene region
-        chrom_start = gene_data['start']
-        chrom_end = gene_data['end']
-        chrom = gene_data['chrom']
-        
-        if 'chrom' in fst_data.columns:
-            gene_fst = fst_data[
-                (fst_data['chrom'] == chrom) & 
-                (fst_data['start'] >= chrom_start) & 
-                (fst_data['end'] <= chrom_end)
-            ].copy()
-        else:
-            gene_fst = fst_data[
-                (fst_data['start'] >= chrom_start) & 
-                (fst_data['end'] <= chrom_end)
-            ].copy()
-        
-        if gene_fst.empty:
-            logger.warning(f"Empty fst data within {chrom}:{chrom_start}-{chrom_end}")
+        style = gene_config.get(f'{statistic}_style', 'fill')
+        if style not in ('line', 'fill'):
+            raise ValueError(f'{statistic}_style must be line or fill')
+        start, end = gene_data['start'], gene_data['end']
+        selected = (frame.start >= start) & (frame.end <= end)
+        if 'chrom' in frame:
+            selected &= frame.chrom.eq(str(gene_data['chrom']))
+        frame = frame.loc[selected].copy()
+        if frame.empty:
+            logger.warning(f'Empty {statistic} data within {gene_data["chrom"]}:{start}-{end}')
             return None
-        
-        # Calculate genomic positions (center of each window)
-        gene_fst['pos_bp'] = (gene_fst['start'] + gene_fst['end']) / 2
-        
-        # Create inset axes for fst plot
-        fst_bounds = [x_start, y_start + fst_y * bbox_height, bbox_width, fst_height * bbox_height]
-        fst_ax = self.ax.inset_axes(fst_bounds, transform=self.ax.transData)
-        
-        # Draw plots based on style and groups
-        legend_handles = []
-        
-        if 'groups' in gene_fst.columns:
-            groups = sorted(gene_fst['groups'].unique())
-            colors = fst_cmap(np.linspace(0, 1, len(groups)))
-            
-            for i, group in enumerate(groups):
-                group_data = gene_fst[gene_fst['groups'] == group].sort_values('pos_bp')
-                if group_data.empty:
-                    continue
-                
-                color = colors[i]
-                
-                if fst_style == 'fill':
-                    # Fill between style
-                    fst_ax.fill_between(group_data['pos_bp'], 0, group_data['fst'], 
-                                      color=color, alpha=0.6, label=group)
-                    line = fst_ax.plot(group_data['pos_bp'], group_data['fst'], 
-                                     color=color, linewidth=1, alpha=0.8, label=group)[0]
-                else:
-                    # Line only style
-                    line = fst_ax.plot(group_data['pos_bp'], group_data['fst'], 
-                                     color=color, linewidth=1, label=group)[0]
-                
-                legend_handles.append(line)
+        frame['pos_bp'] = (frame.start + frame.end) / 2
+        x, y, width, height = bbox
+        physical_x, _, physical_width, _ = self._physical_frame(gene_config, bbox)
+        track_y = gene_config.get(f'{statistic}_y', 0.55 if statistic == 'pi' else 0.8)
+        track_height = gene_config.get(f'{statistic}_height', 0.2)
+        track_ax = self.ax.inset_axes([physical_x, y + track_y * height, physical_width, track_height * height],
+                                     transform=self.ax.transData)
+        cmap = LinearSegmentedColormap.from_list(f'{statistic}_cmap',
+            ['#C5504B', '#114F8B', '#FCE988', '#90CAEE'], N=100)
+        if 'groups' in frame:
+            labels = sorted(frame.groups.unique())
+            colors = cmap(np.linspace(0, 1, len(labels)))
+            series = [(label, frame.loc[frame.groups.eq(label)], color)
+                      for label, color in zip(labels, colors)]
         else:
-            # Single group
-            sorted_data = gene_fst.sort_values('pos_bp')
-            color = 'C1'
-            
-            if fst_style == 'fill':
-                fst_ax.fill_between(sorted_data['pos_bp'], 0, sorted_data['fst'], 
-                                  color=color, alpha=0.6, label='F$_{st}$')
-                line = fst_ax.plot(sorted_data['pos_bp'], sorted_data['fst'], 
-                                 color=color, linewidth=1.5, alpha=0.8, label='F$_{st}$')[0]
-            else:
-                line = fst_ax.plot(sorted_data['pos_bp'], sorted_data['fst'], 
-                                 color=color, linewidth=2, label='F$_{st}$')[0]
-            
-            legend_handles = [line]
-        
-        # Configure fst axes
-        x_min, x_max = np.min(gene_fst['pos_bp']), np.max(gene_fst['pos_bp'])
-        fst_ax.set_xlim(x_min, x_max)
-        fst_ax.set_ylabel(r'F$_{st}$', fontsize=8)
-        
-        # Set custom x-axis ticks only at min and max values
-        fst_ax.set_xticks([x_min, x_max])
-        fst_ax.set_xticklabels([f'{int(x_min):,}', f'{int(x_max):,}'])
-        fst_ax.tick_params(axis='both', labelsize=6)
-        fst_ax.spines[["top", "right"]].set_visible(False)
+            series = [('π' if statistic == 'pi' else r'F$_{st}$', frame,
+                       'C0' if statistic == 'pi' else 'C1')]
+        handles = []
+        for label, group, color in series:
+            group = group.sort_values('pos_bp', kind='stable')
+            positions = group.pos_bp.to_numpy(dtype=float)
+            values = group[statistic].to_numpy(dtype=float) * (1000 if statistic == 'pi' else 1)
+            if not np.isfinite(values).any():
+                logger.warning(f'No finite {statistic} estimates for group {label} in this region')
+            if style == 'fill':
+                track_ax.fill_between(positions, 0, values, color=color, alpha=0.6)
+            handles.append(track_ax.plot(positions, values, color=color, linewidth=1,
+                marker='o', markersize=2.5, label=label)[0])
+        # Coordinate limits describe the selected genomic interval, including
+        # singleton windows. Do not silently stretch the outer window midpoints.
+        track_ax.set_xlim(start - .5, end + .5)
+        ticks = [start, end] if start < end else [start]
+        track_ax.set_xticks(ticks)
+        track_ax.set_xticklabels([f'{value:,}' for value in ticks])
+        track_ax.set_ylabel(r'π ($10^{-3}$)' if statistic == 'pi' else r'F$_{st}$', fontsize=8)
+        track_ax.tick_params(axis='both', labelsize=6)
+        track_ax.spines[['top', 'right']].set_visible(False)
+        track_ax.legend(handles, [handle.get_label() for handle in handles],
+            bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left', mode='expand',
+            borderaxespad=0., ncol=3, fontsize=6, frameon=False)
+        return handles
 
-        # Add legend
-        if legend_handles:
-            fst_ax.legend(legend_handles, [h.get_label() for h in legend_handles],
-                         bbox_to_anchor=(0., 1.02, 1., .102), loc='lower left',
-                         mode='expand', borderaxespad=0., ncol=3, fontsize=6, frameon=False)
-        
-        return legend_handles
-
-    
     def _draw_variant_frequency(self, gene_hap_sorted, hap_cols, group_info, 
                               hap_abs_x, start_y, cell_width, freq_height, bbox_width, plot_type='bar'):
         """Draw variant frequency tracks."""
@@ -1144,6 +1086,7 @@ class FancyGene(object):
     
     def plot(self):
         """Create the gene visualization plot."""
+        self._count_label_layout = []
         # Add data from config
         self.add_data(self.config['data'])
         
@@ -1160,7 +1103,7 @@ class FancyGene(object):
             gene_data = self.gene_data[gene_id]
             
             # Get bbox from config or use default
-            default_bbox = self.toml_config['default']['bbox']
+            default_bbox = self.toml_config.get('default', {}).get('bbox', [0.1, 0.1, 0.8, 0.8])
             bbox = gene_config.get('bbox', default_bbox)
             
             # # If multiple genes, adjust bbox positions vertically
@@ -1194,10 +1137,12 @@ class FancyGene(object):
         self.ax.set_yticks([])
         for spine in self.ax.spines.values():
             spine.set_visible(False)
+
+        self._fit_haplotype_count_labels()
         
         # Save figure
         if self.output:
-            plt.savefig(self.output, dpi=300, bbox_inches='tight')
+            save_figure(self.fig, self.output, dpi=300, bbox_inches='tight')
             logger.info(f"Gene plot saved to: {self.output} with size {self.width}x{self.height} inches")
         
         return self.fig, self.ax

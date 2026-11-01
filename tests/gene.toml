@@ -1,7 +1,7 @@
 [default]
 bbox = [0.2, 0.2, 0.8, 0.6] # all artist objects will be plotted in the boundary box (relative to matplotlib axes)
-xy = [0, 0.4] # the anchor point to plot gene (relative to bbox)
-width = 1 # the width to plot gene, should be within [0, 1] (relative to bbox)
+xy = [0, 0.4] # selected-region left and gene center y (relative to bbox)
+width = 1 # selected physical-region width, shared by gene coordinates and pi/Fst
 height = 0.05 # the height to plot gene, should be within [0, 1] (relative to bbox)
 color = 'C0' # the color to plot feature
 feature = 'exon' # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
@@ -12,14 +12,14 @@ ann_file = "" # the data of variant annotation, csv file, e.g., hap_ann.csv
 ann_y = 0.5 # the y value of annotation text (relative to bbox)
 ann_text_size = 8 # the fontsize of annotation text
 
-hap_file = "" # the data of gene haplotypes, csv file, e.g., hap_table.csv
+hap_file = "" # prefix, e.g., gene reads gene.table.csv and optional gene.group.csv
 hap_y = 0 # the y value of haplotypes (relative to bbox)
 hap_height = 0.3 # the height of whole haplotypes plot (relative to bbox)
 hap_cols = [] # only show the haplotypes data of interested
 hap_label_show = true # Whether to display the haplotype labels
 hap_label_size = 8 # the fontsize of haplotype labels
 
-hap_group_file = "" # the group information of haplotypes, csv file with 2 columns: haplotype, group
+hap_color_file = "" # optional headerless two-column haplotype-to-category CSV
 hap_group_bar_x = -0.12 # x offset for group bar relative to haplotype matrix
 hap_group_bar_width = 0.02 # width of group bar
 
@@ -29,7 +29,7 @@ hap_freq_y = 0 # the y value of frequency track (relative to bbox)
 hap_freq_plot_type = "bar" # plot type of frequency track: "bar" or "pie"
 
 hap_cluster_show = true # whether to show hierarchical clustering dendrogram
-hap_cluster_linkage = 'ward' # hierarchical linkage method: 'ward', 'complete', 'average', 'single'
+hap_cluster_linkage = 'average' # Hamming linkage: 'average', 'complete', 'single', 'weighted'
 hap_cluster_width = 0.1 # width of the dendrogram relative to the plot width
 
 hap_het_rate = [0, 1] # the range of heterozygosity rate for haplotypes (samples) to keep
