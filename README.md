@@ -20,19 +20,6 @@
 
 ## ✨ Features
 
-### Local population-statistics correction (2026-10-31)
-
-VCF regions are now 1-based inclusive, partial missing diploid calls are handled consistently,
-and pi/Tajima's D count true alleles instead of genotype dosage categories. These two statistics
-use biallelic SNPs; windows have the requested size, clipped at the region end. Tajima's D
-keeps a fixed population and excludes SNPs with incomplete calls in that population. Windows
-with insufficient retained information return NaN. Its normal CSV retains only
-`chrom,start,end,counts,tajima_d,groups`, without added auxiliary columns. Pi uses the full
-window length and assumes absent eligible SNPs are invariant and all bases callable.
-See [POPULATION_METHODS.md](POPULATION_METHODS.md) for formulas, missing-data rules,
-input limitations, output changes and reproducible validation. Normal outputs remain CSV;
-validation metadata belongs only to the developer QA directory.
-
 ### Core Modules
 | Module | Description |
 |:---|:---|
@@ -92,9 +79,6 @@ cd hastat
 ```
 
 ### 3. Install hastat
-Version `1.1.0` includes statistical corrections and expanded plotting features.
-See [CHANGELOG.md](CHANGELOG.md) for release notes and parameter updates.
-
 You can install `hastat` using the modern `build` system or directly with pip.
 
 **Tip for users in China:** To speed up dependency downloading, you can use the Tsinghua PyPI mirror by adding `-i https://pypi.tuna.tsinghua.edu.cn/simple` to pip commands.
@@ -242,8 +226,7 @@ deterministic profile/rank mapping, including multi-region requests. `freq`
 contains integer sample counts: `haplotypes,samples` without metadata, or
 `haplotypes,<population names>` with a single header when grouped. Group files
 may select a sample subset for counting; they do not redefine the profiles.
-Duplicate or unknown sample assignments are rejected. Empty results retain
-headers without inventing a Hap1 group. See [haplotype/counting rules](HAPLOTYPE_METHODS.md).
+Duplicate or unknown sample assignments are rejected. Empty outputs include column headers.
 
 #### 📊 Population Genetics ($\pi$, $F_{ST}$ & Tajima's D)
 
@@ -276,17 +259,14 @@ hastat view -v data.vcf.gz -a ann.gff3 -i GeneID \
 Fst uses the same 1-based inclusive window boundaries as pi/Tajima's D. Group
 assignments must refer to existing, unique samples and contain at least two
 populations. Records lacking enough called individuals for the variance
-components are excluded; empty or unestimable windows retain NaN. Non-default
-`--maf` and `--max_missing` are rejected for pi/Fst/Tajima's D rather than
-silently ignored. The Fst CSV remains `chrom,start,end,counts,fst,groups`;
-`counts` is the input variant count, not the effective-site count. No extra
-columns or summary files are written. See [Fst methods](FST_METHODS.md).
+components are excluded; empty or unestimable windows retain NaN. For pi/Fst/Tajima's D, use the default `--maf` and `--max_missing` settings.
+The Fst CSV format is `chrom,start,end,counts,fst,groups`;
+`counts` is the input variant count.
 
 ### 2. Statistics Module (`hastat stat`)
 Perform statistical tests to associate haplotypes with phenotypes.
 - **Input**: Haplotype groups (from `view -t group`) and Phenotype data (`-p`).
 - **Methods**: `TukeyHSD` (default): classical equal-variance ANOVA plus Tukey–Kramer comparisons; `WelchBonferroni`: Welch ANOVA plus two-sided Welch t tests with Bonferroni correction.
-- **Method naming**: the former `AllPairTest` name is not accepted. Select `WelchBonferroni` explicitly for the unequal-variance method. See [statistical methods](STAT_METHODS.md) for assumptions and references.
 
 #### Phenotype Data Format
 The phenotype data file should be a CSV file with the following format:
@@ -318,11 +298,7 @@ hastat stat -g hap_groups.csv -p phenotype.csv -m WelchBonferroni -o stat_result
 pairwise CSV table. Its fields include the method, sample counts, group means
 and standard deviations, mean differences, confidence intervals, adjusted P
 values, rejection decisions, omnibus P values, and comparison-family sizes.
-No `.summary.json` sidecar is generated. With no `-o`,
-the tool prints the comparison table and omnibus JSON records to stdout.
-These are analysis outputs produced by the tool itself. Input hashes, dependency
-versions, and SHA256 manifests in the development validation bundles are separate
-audit artifacts; the tool does not automatically produce those for every run.
+Without `-o`, the tool prints the comparison table and omnibus records to stdout.
 
 ### 3. Visualization (`hastat plot`)
 Generate high-quality visualizations for your data.
@@ -331,7 +307,7 @@ The Python LD APIs `GeneVariant.get_ld_data` / `get_multi_loci_ld_data` return
 square r² matrices: valid diagonals are 1, undefined entries are NaN and empty
 regions return (0,0). Multi-region overlaps count once. LD uses pairwise complete
 diploid dosage observations with the existing Rogers-Huff implementation.
-See [LD methods and Python example](LD_METHODS.md); `view --type ld` is not a CLI option.
+`view --type ld` is not a CLI option.
 
 #### Common Plot Types
 - **`bar` / `pie`**: Visualize haplotype frequencies in different populations.
@@ -349,7 +325,7 @@ See [LD methods and Python example](LD_METHODS.md); `view --type ld` is not a CL
 Box/bar/pie sample identifiers and group labels are read as text, preserving
 `001`, `1`, and `NA`. Duplicate/empty IDs and duplicate headers are errors.
 Input tables are joined one-to-one on shared IDs; unmatched rows are logged.
-Invalid plotting input produces a nonzero CLI exit. See [plot methods](PLOT_METHODS.md).
+Invalid plotting input produces a nonzero CLI exit.
 
 #### Gene Structure & Tracks (`hastat plot gene`)
 Visualize the gene model along with haplotype variations and statistical tracks ($\pi$, $F_{ST}$).
@@ -496,12 +472,10 @@ not proof of a biologically private allele. Outputs are unphased genotype
 profiles; use `MergedHap` labels for comparison across populations.
 
 Local numbering is deterministic (abundance, then genotype tuple descending).
-Sample suffixes `_1`, `_2`, ... still refer to VCF input order and must match
+Sample suffixes `_1`, `_2`, ... refer to VCF input order and must match
 downstream group/phenotype files. Group CSV headers are `samples,haplotypes`.
-Empty results retain headers at the existing filenames, replacing stale
-results. Non-default `--het`, `--maf` and `--max_missing` are explicitly rejected
-for compare because they previously had no effect. See
-[comparison methods and limits](COMPARE_METHODS.md).
+Empty outputs include column headers. Non-default `--het`, `--maf` and
+`--max_missing` settings are not supported by `compare`.
 
 ```bash
 # 1. Compare haplotypes from two VCFs
@@ -596,17 +570,16 @@ Construct haplotype networks.
 | `-o, --out` | Output file; CSV, TXT/edgelist, GEXF and GML are supported. |
 
 `MST` returns one minimum spanning tree with deterministic tie handling. `MSN`
-retains all equal-weight alternatives occurring in any minimum spanning tree;
-the former `-f/--threshold_factor` heuristic has been removed. Distances count
+includes all equal-weight alternatives occurring in any minimum spanning tree.
+Distances count
 unequal 0/1/2 states on loci complete across all input haplotypes. Loci containing
 `-1` or missing calls are excluded for every pair; no complete loci produces an
 error. Zero-distance haplotypes retain their distinct names.
 
-Single haplotypes survive export and plotting input. Network CSV keeps the
-existing `source,target,weight,type` columns: an isolated node uses `type=node`
+Single haplotypes survive export and plotting input. Network CSV uses the
+`source,target,weight,type` columns: an isolated node uses `type=node`
 with empty target and weight. TXT stores an isolated node as a `#node` comment
 understood by hastat; use GEXF/GML when another application must retain it.
-See [network methods and limitations](NETWORK_METHODS.md).
 </details>
 
 <details>
@@ -631,7 +604,7 @@ Paths inside this TOML are relative to the TOML file's directory (absolute paths
 are also accepted). A specified missing or unreadable file causes an error.
 Pi/Fst tracks accept the existing `view` CSV outputs, preserve literal chromosome
 and group labels, show single-window values as points, and retain NaN gaps and
-negative Fst estimates. See [gene track display rules](GENE_PLOT_METHODS.md).
+negative Fst estimates.
 
 | Parameter | Type | Description | Default |
 |:---|:---|:---|:---|
@@ -691,23 +664,21 @@ are added automatically. If it is absent, labels show names only. Generate both
 files with the same region, samples and filters. Counts refer to unique assigned
 samples, not SNPs or chromosome copies, and stay with their names after selection
 and clustering. A present but malformed/mismatched group file is an error, even
-when counts are hidden. `hap_count_show=false` hides counts. `sample_hap_file` is
-removed; replace the old category setting `hap_group_file` with `hap_color_file`.
-The latter remains a headerless file such as `Hap1,A` / `Hap2,B`.
+when counts are hidden. `hap_count_show=false` hides counts. `hap_color_file` accepts a headerless
+category file such as `Hap1,A` / `Hap2,B`.
 
 Clustering uses average linkage by default on Hamming distances across common
 complete loci. Singletons remain visible, two haplotypes form a one-branch tree,
 and tied distances are resolved from a stable ID order. Missing calls do not form
 a genotype category. No shared complete locus or an incompatible method causes
-an explicit error. See [gene plot methods](GENE_PLOT_METHODS.md).
+an explicit error.
 
 Gene features, annotation targets, SNP connection endpoints and Pi/Fst tracks
 share the selected physical region, including requested upstream/downstream
 bases. Coordinates increase left to right on both strands; the strand arrow
 indicates transcription direction. GFF feature lengths are inclusive, so a
 single-base feature remains visible. Haplotype matrix columns remain equally
-spaced; their connectors map back to physical positions. This affects drawing
-positions only, not the supplied window estimates or output columns.
+spaced; their connectors map back to physical positions.
 </details>
 
 <details>

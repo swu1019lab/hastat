@@ -68,7 +68,7 @@ eight-haplotype family (28 pairwise comparisons), even though only three
 brackets are requested. Symbols: *** < 0.001, ** < 0.01, * < 0.05, ns ≥ 0.05.
 TukeyHSD assumes independent observations, approximately normal within-group
 errors and common within-group variance.
-[Statistical methods](../STAT_METHODS.md) · [PDF](images/box.pdf) · [SVG](images/box.svg)
+[PDF](images/box.pdf) · [SVG](images/box.svg)
 
 ## 4. Complete haplotype network
 
@@ -83,7 +83,7 @@ circle sizes exactly match the corresponding node sizes, with separated labels.
 Edge numbers count unequal genotype states across common complete sites.
 MSN retains all minimum-spanning alternatives, which can include tied routes.
 The layout does not imply ancestry, evolutionary time or geographic distance.
-[Network methods](../NETWORK_METHODS.md) · [PDF](images/network.pdf) · [SVG](images/network.svg)
+[PDF](images/network.pdf) · [SVG](images/network.svg)
 
 ## 5. Complete gene haplotype figure
 
@@ -116,7 +116,7 @@ columns stay equally spaced.
 The plot reads existing Pi/Fst CSV values. For biological analyses, generate
 corresponding windows using hastat view -t pi and hastat view -t fst over the
 same region and populations.
-[Gene plot methods](../GENE_PLOT_METHODS.md) · [PDF](images/gene_tracks.pdf) · [SVG](images/gene_tracks.svg)
+[PDF](images/gene_tracks.pdf) · [SVG](images/gene_tracks.svg)
 
 Public inputs, commands and figures are user documentation. Tests, developer
 validation code, parser caches, logs and QA reports are kept separately and

@@ -4,7 +4,6 @@ include pyproject.toml setup.py MANIFEST.in README.md CHANGELOG.md LICENSE
 include hastat.egg-info/PKG-INFO hastat.egg-info/SOURCES.txt
 include hastat.egg-info/dependency_links.txt hastat.egg-info/entry_points.txt
 include hastat.egg-info/requires.txt hastat.egg-info/top_level.txt
-include *_METHODS.md
 include docs/EXAMPLES.md
 include docs/gallery.html
 recursive-include docs/examples *.csv *.gff3 *.toml commands.sh
