@@ -6,7 +6,6 @@ bbox = [0.2, 0.2, 0.8, 0.6] # all artist objects will be plotted in the boundary
 gene_y = 0.4 # gene center relative to bbox height
 gene_height = 0.05 # the height to plot gene, should be within [0, 1] (relative to bbox)
 gene_color = 'C0' # the color to plot feature
-gene_feature = 'exon' # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
 gene_label_size = 10 # the fontsize of gene label
 gene_label_show = true # Whether to display the gene label
 

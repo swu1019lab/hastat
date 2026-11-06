@@ -66,10 +66,11 @@ def run(args):
         config = {
             'data': {
                 'sample_hap': args.sample_hap,
-                'sample_phe': args.sample_phe
+                'sample_phe': args.sample_phe,
             },
             'plot': {
                 'phe_index': args.phe_index,
+                'x_rotation': getattr(args, 'x_rotation', 0),
                 'width': args.width,
                 'height': args.height,
                 'comparisons': args.comparisons or [],

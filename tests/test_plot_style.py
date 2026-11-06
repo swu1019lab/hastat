@@ -145,7 +145,8 @@ class PlotStyleValidation(unittest.TestCase):
                 bounds=marker.get_window_extent()
                 gap=bounds.xmin-edge if sign==1 else edge-bounds.xmax
                 self.assertGreater(gap,0)
-                self.assertEqual(marker.get_position(),(3*sign,0))
+                self.assertEqual(marker.get_position(),(.5*sign,0))
+                self.assertLess(gap, obj.fig.dpi / 72)
                 plt.close(obj.fig)
 
     def test_single_feature_direction_marker_is_horizontal_for_both_strands(self):
@@ -159,5 +160,5 @@ class PlotStyleValidation(unittest.TestCase):
                 self.assertEqual(len(markers),1)
                 self.assertEqual(markers[0].get_text(), '>' if sign==1 else '<')
                 self.assertIsNone(markers[0].arrow_patch)
-                self.assertEqual(markers[0].get_position(),(3*sign,0))
+                self.assertEqual(markers[0].get_position(),(.5*sign,0))
                 plt.close(obj.fig)

@@ -2,6 +2,12 @@
 
 ## hastat 2.0.0
 
+- Show effective sample counts and overall test P values on box plots; add --x_rotation for label angles.
+- Add hap_min_size to filter displayed haplotypes by sample count while retaining the full population for AF and LD.
+- Automatically draw CDS and UTR blocks, falling back to exons when CDS annotations are absent; remove the gene_feature setting.
+- Place terminal strand markers closer to the gene boundary.
+- Refresh the box and gene example figures and their documentation.
+
 - Reorganize Python APIs for variant data, haplotypes, population statistics,
   and haplotype-trait association.
 - Organize gene visualization into gene.py and tracks.py.

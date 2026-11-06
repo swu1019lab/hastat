@@ -8,7 +8,6 @@ layout = "fixed" # use this gene's bbox-relative coordinates
 gene_y = 0.57416575647776 # gene center relative to bbox height
 gene_height = 0.01767891025881 # the height to plot gene, should be within [0, 1] (relative to bbox)
 gene_color = "#24495D" # the color to plot feature
-gene_feature = "CDS" # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
 gene_label_size = 10 # the fontsize of gene label
 gene_label_show = true # Whether to display the gene label
 
@@ -53,6 +52,7 @@ hap_cluster_linkage = "average" # Hamming linkage: 'average', 'complete', 'singl
 hap_cluster_width = 0.1 # width of the dendrogram relative to the plot width
 
 # Haplotype and variant filters
+hap_min_size = 0 # hide haplotypes with fewer assigned samples; 0 disables this display filter
 hap_het_rate = [0, 1] # the range of heterozygosity rate for haplotypes (samples) to keep
 hap_mis_rate = [0, 1] # the range of missing rate for haplotypes (samples) to keep
 var_het_rate = [0, 1] # the range of heterozygosity rate for variants (sites) to keep

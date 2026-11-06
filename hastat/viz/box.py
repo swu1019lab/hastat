@@ -12,6 +12,7 @@ from itertools import combinations
 import matplotlib.pyplot as plt
 from hastat.viz._export import plot_fonts, save_figure
 from scipy import stats
+from statsmodels.stats.oneway import anova_oneway
 from hastat.log.logger import logger
 from matplotlib.colors import LinearSegmentedColormap
 from hastat.dataio.table import read_sample_csv, normalize_sample_table, select_haplotypes, merge_samples, parse_numeric_values
@@ -168,6 +169,50 @@ class HapBox(object):
             adjusted[a, b] = min(1.0, len(pairs) * p) if np.isfinite(p) else np.nan
         return adjusted
 
+    def omnibus_test(self, name):
+        """Test the same eligible input family used by pairwise comparisons.
+
+        Parametric methods use the existing ordinary/Welch ANOVA convention.
+        Mann-Whitney comparisons use the tie-corrected Kruskal-Wallis H test
+        (Kruskal and Wallis, 1952, doi:10.1080/01621459.1952.10483441), with
+        its chi-square approximation restricted to at least five values/group.
+        """
+        self.get_plot_data(name)
+        arrays = [part[name].dropna().to_numpy(dtype=float)
+                  for _, part in self._test_data.groupby('haplotypes', observed=True)]
+        arrays = [a for a in arrays if len(a) >= self.min_hap_size]
+        if len(arrays) < 2:
+            return None
+        if self.method == 'mannwhitneyu':
+            if min(map(len, arrays)) < 5:
+                logger.warning('Kruskal-Wallis annotation requires at least five observations per eligible group')
+                return None
+            if np.ptp(np.concatenate(arrays)) == 0:
+                return None
+            result = stats.kruskal(*arrays)
+            label = 'Kruskal-Wallis'
+        else:
+            unequal = self.method in ('welch', 'WelchBonferroni')
+            variances = np.array([a.var(ddof=1) for a in arrays])
+            if (unequal and np.any(variances == 0)) or np.all(variances == 0):
+                return None
+            result = anova_oneway(arrays, use_var='unequal' if unequal else 'equal',
+                                  welch_correction=True)
+            label = 'Welch ANOVA' if unequal else 'ANOVA'
+        if not np.isfinite(result.pvalue):
+            return None
+        return dict(test=label, pvalue=float(result.pvalue), groups=len(arrays),
+                    n=sum(map(len, arrays)))
+
+    @staticmethod
+    def _p_label(pvalue):
+        if pvalue == 0:
+            return r'$P < 2.23\times10^{-308}$'
+        if pvalue < .001:
+            mantissa, exponent = f'{pvalue:.2e}'.split('e')
+            return rf'$P = {mantissa}\times10^{{{int(exponent)}}}$'
+        return rf'$P = {pvalue:.3g}$'
+
     def get_significance_symbol(self, p_value):
         """
         Get significance symbol based on p-value
@@ -224,15 +269,20 @@ class HapBox(object):
 
         self.add_data(self.config['data'])
         
-        # Set comparisons and method if provided
+        self.add_method(self.config['plot'].get('method', 't-test'))
+        # Select comparison brackets independently of the overall test.
+        self.comparisons = None
         if self.config['plot'].get('comparisons'):
             self.add_comparisons(self.config['plot']['comparisons'])
-            self.add_method(self.config['plot']['method'])
             if self.config['plot'].get('step_size'):
                 self.add_step_size(self.config['plot']['step_size'])
 
         name = self.sample_phe.columns[self.config['plot']['phe_index']]
         xdata, ydata, data, labels = self.get_plot_data(name)
+        rotation = self.config['plot'].get('x_rotation', 0)
+        if not isinstance(rotation, (int, float, np.number)) or isinstance(rotation, bool) or not np.isfinite(rotation):
+            raise ValueError('x_rotation must be a finite angle in degrees')
+        overall = self.omnibus_test(name)
         pvalues = self.comparison_pvalues(name) if self.comparisons else {}
         for a, b in self.comparisons or []:
             if a not in set(self.sample_hap.haplotypes) or b not in set(self.sample_hap.haplotypes):
@@ -304,7 +354,12 @@ class HapBox(object):
             ylim=(None, None),
         )
         ax.set_ylabel(name)
-        ax.set_xticklabels(labels, rotation=45, ha='right')
+        alignment = 'center' if rotation % 90 == 0 else ('right' if rotation > 0 else 'left')
+        ax.set_xticklabels([f'{label}\n(n={len(data[label])})' for label in labels],
+                           rotation=rotation, ha=alignment)
+        if overall is not None:
+            title = ax.set_title(overall['test'] + ': ' + self._p_label(overall['pvalue']), pad=12)
+            title.set_gid('omnibus-test')
         ax.spines[["top", "right"]].set_visible(False)
         ax.yaxis.grid(
             True,

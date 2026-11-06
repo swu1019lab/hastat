@@ -258,7 +258,7 @@ class GeneTrackValidation(unittest.TestCase):
             stream.write('1\ttest\tgene\t51\t80\t.\t-\t.\tID=G2\n'
                          '1\ttest\texon\t54\t76\t.\t-\t.\tID=E2;Parent=G2\n')
         config = self.write('two.toml', '[default]\ngene_color="#154276"\n'
-            '[G1]\nwidth=0.1\n[G2]\ngene_color="#ad534d"\ngene_feature="exon"\n')
+            '[G1]\nwidth=0.1\n[G2]\ngene_color="#ad534d"\n')
         for gene, other, color in [('G1','G2','#154276'), ('G2','G1','#ad534d')]:
             output = self.root / f'{gene}.svg'
             result = self.cli('plot', 'gene', '--gff', gff, '--gene', gene, '--toml', config, '-o', output)

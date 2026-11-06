@@ -27,11 +27,11 @@ from hastat.utils.haplotype import cluster_haplotypes
 
 
 GENE_TOML_KEYS = {
-    'bbox', 'layout', 'gene_y', 'gene_height', 'gene_color', 'gene_feature',
+    'bbox', 'layout', 'gene_y', 'gene_height', 'gene_color',
     'gene_label_size', 'gene_label_show',
     'ann_file', 'ann_y', 'ann_band_y', 'ann_legend_y', 'ann_text_size',
     'hap_file', 'hap_y', 'hap_height', 'hap_cols', 'hap_label_show', 'hap_label_size',
-    'hap_count_show', 'hap_color_file', 'hap_group_bar_x', 'hap_group_bar_width',
+    'hap_count_show', 'hap_min_size', 'hap_color_file', 'hap_group_bar_x', 'hap_group_bar_width',
     'hap_cluster_show', 'hap_cluster_linkage', 'hap_cluster_width',
     'hap_het_rate', 'hap_mis_rate', 'var_het_rate', 'var_mis_rate',
     'af_show', 'af_height', 'af_y', 'af_style', 'pop_file',
@@ -150,6 +150,9 @@ class FancyGene(object):
         for option in ('ld_show', 'ld_colorbar', 'shade_gene', 'af_show'):
             if option in gene_config and not isinstance(gene_config[option], bool):
                 raise ValueError(f'{option} must be true or false')
+        minimum = gene_config.get('hap_min_size', 0)
+        if type(minimum) is not int or minimum < 0:
+            raise ValueError('hap_min_size must be a nonnegative integer')
         if gene_config.get('ld_show', False) and not gene_config.get('vcf_file'):
             raise ValueError('ld_show=true requires an indexed vcf_file')
         if gene_config.get('hap_file'):
@@ -204,14 +207,45 @@ class FancyGene(object):
                 'UTR': []
             }
             
-            # Get all features for this gene
-            for feature in self.gff_db.children(gene_obj, order_by='start'):
+            # Collect explicit features; infer UTRs only within a transcript.
+            children = list(self.gff_db.children(gene_obj, order_by='start'))
+            for feature in children:
                 feature_type = feature.featuretype
                 if feature_type in features:
                     features[feature_type].append([feature.start, feature.end])
             
-            # Combine UTRs
-            features['UTR'] = features['five_prime_UTR'] + features['three_prime_UTR']
+            explicit = features['UTR'] + features['five_prime_UTR'] + features['three_prime_UTR']
+            transcripts = [f for f in children if f.featuretype in ('mRNA', 'transcript')]
+            units = [(t, list(self.gff_db.children(t, order_by='start'))) for t in transcripts]
+            if not transcripts:
+                # Some GFFs attach all features directly to one gene.
+                direct = list(self.gff_db.children(gene_obj, level=1, order_by='start'))
+                direct_ids = {f.id for f in direct}
+                intervals = [f for f in children if f.featuretype in ('CDS', 'exon')]
+                units = [(gene_obj, direct)] if all(f.id in direct_ids for f in intervals) else []
+            inferred = []
+            for transcript, parts in units:
+                partial = any(str(value).lower() in ('true', 'yes', '1', 'cds_start_nf', 'cds_end_nf')
+                              for feature in [transcript, *parts]
+                              for key in ('partial', 'tag')
+                              for value in feature.attributes.get(key, []))
+                partial |= any('.' in str(value) for feature in [transcript, *parts]
+                               for key in ('start_range', 'end_range')
+                               for value in feature.attributes.get(key, []))
+                if partial:
+                    continue
+                exons = [[f.start, f.end] for f in parts if f.featuretype == 'exon']
+                cds = [[f.start, f.end] for f in parts if f.featuretype == 'CDS']
+                if not exons or not cds:
+                    continue
+                # GTF stop codons can be separate from CDS, but are not UTR.
+                coding = cds + [[f.start, f.end] for f in parts
+                                if f.featuretype in ('start_codon', 'stop_codon')]
+                if self._subtract_intervals(coding, exons):
+                    continue
+                inferred.extend(self._subtract_intervals(exons, coding))
+            # In a collapsed gene view, coding bases take precedence across isoforms.
+            features['UTR'] = self._subtract_intervals(explicit + inferred, features['CDS'])
             
             logger.info(f"Extracted features for gene {gene_id}: {chrom}:{start}-{end}")
             return features
@@ -219,6 +253,37 @@ class FancyGene(object):
         except Exception as e:
             logger.error(f"Failed to extract features for gene {gene_id}: {e}")
             raise e
+
+    @staticmethod
+    def _merge_intervals(intervals):
+        merged = []
+        for start, end in sorted(intervals):
+            if merged and start <= merged[-1][1] + 1:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        return merged
+
+    @classmethod
+    def _subtract_intervals(cls, intervals, excluded):
+        """Subtract inclusive base intervals without filling introns or gaps."""
+        result = []
+        cuts = cls._merge_intervals(excluded)
+        for start, end in cls._merge_intervals(intervals):
+            cursor = start
+            for left, right in cuts:
+                if right < cursor:
+                    continue
+                if left > end:
+                    break
+                if left > cursor:
+                    result.append([cursor, left - 1])
+                cursor = max(cursor, right + 1)
+                if cursor > end:
+                    break
+            if cursor <= end:
+                result.append([cursor, end])
+        return result
     
     def _load_annotation_data(self, ann_file):
         return tracks.read_annotations(ann_file)
@@ -291,7 +356,7 @@ class FancyGene(object):
         """Draw gene structure features (CDS, exons, UTRs)."""
         x_start, y_start, bbox_width, bbox_height = bbox
         color = gene_config.get('gene_color', '#24495D')
-        feature_type = gene_config.get('gene_feature', 'CDS')
+        feature_type = 'CDS' if gene_data.get('CDS') else 'exon'
         gene_label_size = gene_config.get('gene_label_size', 10)
         gene_label_show = gene_config.get('gene_label_show', True)
         
@@ -305,38 +370,42 @@ class FancyGene(object):
         gene_left = self._coordinate_transform(gene_start - 0.5, frame, region_start, region_end)
         gene_right = self._coordinate_transform(gene_end + 0.5, frame, region_start, region_end)
         
-        # Draw selected features
+        # Prefer CDS blocks, with exon blocks when coding annotations are absent.
         features_to_draw = gene_data.get(feature_type, [])
-        if len(features_to_draw) == 0:
-            logger.warning(f"No {feature_type} features found! Please check the GFF file and toml file.")
-        for feature_start, feature_end in features_to_draw:
+        if not features_to_draw:
+            logger.warning('No CDS or exon annotations for %s; drawing the gene interval only',
+                           gene_data['gene_id'])
+        blocks = [(a, b, abs_height, feature_type) for a, b in features_to_draw]
+        if feature_type == 'CDS':
+            blocks += [(a, b, .55 * abs_height, 'UTR') for a, b in gene_data.get('UTR', [])]
+        for index, (feature_start, feature_end, block_height, kind) in enumerate(blocks):
             # Inclusive features occupy their full base cells, even if start == end.
             feature_x = self._coordinate_transform(feature_start - 0.5, frame, region_start, region_end)
             feature_right = self._coordinate_transform(feature_end + 0.5, frame, region_start, region_end)
             feature_width = feature_right - feature_x
             
             feature_rect = patches.Rectangle(
-                (feature_x, abs_y - abs_height/2),
-                feature_width, abs_height,
+                (feature_x, abs_y - block_height/2),
+                feature_width, block_height,
                 facecolor=color, edgecolor=color, 
                 alpha=1, zorder=2
             )
+            feature_rect.set_gid(f'gene-{kind}-{index}')
             self.ax.add_patch(feature_rect)
         
         # Connect features behind their fills and mark direction once at the terminal edge.
-        if features_to_draw:
-            backbone = patches.PathPatch(
-                mpl.path.Path([(gene_left, abs_y), (gene_right, abs_y)]),
-                fill=False, edgecolor='#263746', linewidth=.9, zorder=1)
-            self.ax.add_patch(backbone)
-            if gene_data['strand'] in ('+', '-'):
-                sign = 1 if gene_data['strand'] == '+' else -1
-                terminal = (gene_right if sign == 1 else gene_left, abs_y)
-                marker = self.ax.annotate('>' if sign == 1 else '<', xy=terminal,
-                    xytext=(3*sign, 0), textcoords='offset points',
-                    ha='left' if sign == 1 else 'right', va='center',
-                    fontsize=12, color='#263746', annotation_clip=False, zorder=2)
-                marker.set_gid('strand-direction')
+        backbone = patches.PathPatch(
+            mpl.path.Path([(gene_left, abs_y), (gene_right, abs_y)]),
+            fill=False, edgecolor='#263746', linewidth=.9, zorder=1)
+        self.ax.add_patch(backbone)
+        if gene_data['strand'] in ('+', '-'):
+            sign = 1 if gene_data['strand'] == '+' else -1
+            terminal = (gene_right if sign == 1 else gene_left, abs_y)
+            marker = self.ax.annotate('>' if sign == 1 else '<', xy=terminal,
+                xytext=(.5*sign, 0), textcoords='offset points',
+                ha='left' if sign == 1 else 'right', va='center',
+                fontsize=12, color='#263746', annotation_clip=False, zorder=2)
+            marker.set_gid('strand-direction')
 
         # Add gene name label
         if gene_label_show:
@@ -360,7 +429,8 @@ class FancyGene(object):
         if not isinstance(count_show, bool):
             raise ValueError('hap_count_show must be true or false')
         assignments = read_assignments(sample_hap_file, label='haplotypes') if sample_hap_file else None
-        hap_counts = assignments.haplotypes.value_counts().to_dict() if count_show and assignments is not None else None
+        sample_counts = assignments.haplotypes.value_counts().to_dict() if assignments is not None else None
+        hap_counts = sample_counts if count_show else None
         
         # New config options
         hap_color_file = gene_config.get('hap_color_file', '')
@@ -460,8 +530,17 @@ class FancyGene(object):
         # Get haplotype columns (excluding chrom, pos, ref, alt)
         hap_cols = [col for col in gene_hap.columns 
                    if col not in ['chrom', 'pos', 'ref', 'alt']]
+
+        # Apply this display filter after site selection, preserving AF/LD inputs.
+        minimum = gene_config.get('hap_min_size', 0)
+        if minimum > 0:
+            if sample_counts is None:
+                logger.warning('hap_min_size requires the matching .group.csv; size filtering is skipped')
+            else:
+                hap_cols = [hap for hap in hap_cols if sample_counts.get(hap, 0) >= minimum]
         
         if not hap_cols:
+            logger.warning('No haplotypes remain for display after hap_min_size filtering')
             return
 
         # Load group data
@@ -890,7 +969,7 @@ class FancyGene(object):
         self.gene_data = self._extract_gene_features(self.gene_id)
         bbox = conf.get('bbox', [0.1, 0.1, 0.8, 0.8])
         view = self._prepare_haplotypes(self.gene_data, conf)
-        if conf.get('ld_show', False) and view is None:
+        if conf.get('ld_show', False) and view is None and not conf.get('hap_min_size', 0):
             raise ValueError(f'LD requires a haplotype table with displayed sites for {self.gene_id}')
         layout = self._track_layout(conf, bbox, view)
         delta = self._render_gene(conf, bbox, view, layout)

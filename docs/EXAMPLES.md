@@ -66,7 +66,7 @@ Pies show haplotype proportions and sample totals for each population.
 hastat plot box --sample_hap gene.group.csv --sample_phe phenotypes.csv --method TukeyHSD --comparisons Hap1 Hap2 --comparisons Hap1 Hap4 --comparisons Hap1 Hap8 --width 10 --height 5 -o ../images/box.png
 ```
 
-Points show observations; boxes show medians and interquartile ranges.
+Points show observations; boxes show medians and interquartile ranges. Labels include effective sample counts, and the overall test P value is shown above the plot. Use `--x_rotation 45` to rotate labels.
 Whiskers extend to the most extreme observations within 1.5 interquartile ranges.
 The three displayed comparisons use Tukey-adjusted P values from the full
 eight-haplotype family (28 pairwise comparisons). `--comparisons` selects the
