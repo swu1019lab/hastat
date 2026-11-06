@@ -2,6 +2,7 @@
 
 import matplotlib.pyplot as plt
 from matplotlib import patches
+from matplotlib.collections import LineCollection
 from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from matplotlib.font_manager import FontProperties
 from matplotlib.offsetbox import AnnotationBbox, AnchoredOffsetbox, DrawingArea, HPacker, TextArea, VPacker
@@ -13,7 +14,7 @@ import pandas as pd
 from hastat.dataio.network import read_network
 from hastat.dataio.table import merge_samples, normalize_sample_table, read_sample_csv, validate_sample_ids
 from hastat.log.logger import logger
-from hastat.viz._export import save_figure
+from hastat.viz._export import plot_fonts, save_figure
 
 
 class FancyNetwork:
@@ -202,6 +203,39 @@ class FancyNetwork:
         ax.add_artist(self.legend_box)
         return self.legend_box.get_window_extent(ax.figure.canvas.get_renderer()).height*72/ax.figure.dpi
 
+    def _draw_edge_ticks(self, ax, line, count, cfg):
+        """Place perpendicular difference marks along the visible edge path."""
+        if count == 0:
+            return
+        # Work in display coordinates so mark lengths remain in points and
+        # normals stay perpendicular even when the axes have unequal scales.
+        path = ax.transData.transform(line)
+        vectors = np.diff(path, axis=0)
+        lengths = np.linalg.norm(vectors, axis=1)
+        keep = lengths > 0
+        starts, vectors, lengths = path[:-1][keep], vectors[keep], lengths[keep]
+        if not len(lengths):
+            return
+        cumulative = np.r_[0., np.cumsum(lengths)]
+        pixels_per_point = ax.figure.dpi / 72
+        size = cfg.get('edge_label_size', 8)
+        spacing = max(2., .45 * size) * pixels_per_point
+        span = min((count - 1) * spacing, .8 * cumulative[-1])
+        offsets = (np.arange(count) - (count - 1) / 2) * span / max(1, count - 1)
+        distances = cumulative[-1] / 2 + offsets
+        indices = np.minimum(np.searchsorted(cumulative, distances, side='right') - 1,
+                             len(lengths) - 1)
+        tangents = vectors[indices] / lengths[indices, None]
+        centers = starts[indices] + (distances - cumulative[indices])[:, None] * tangents
+        normals = np.column_stack((-tangents[:, 1], tangents[:, 0]))
+        half_marks = normals * (.35 * size * pixels_per_point)
+        segments = np.stack((centers - half_marks, centers + half_marks), axis=1)
+        segments = ax.transData.inverted().transform(segments.reshape(-1, 2)).reshape(-1, 2, 2)
+        marks = LineCollection(segments, colors=cfg.get('edge_label_color', 'black'),
+                               linewidths=cfg.get('edge_width', 1), zorder=2)
+        marks.set_gid('edge-differences')
+        ax.add_collection(marks)
+
     def _draw_graph(self, ax, positions, radii, scale):
         cfg = self.config['plot']
         renderer = ax.figure.canvas.get_renderer()
@@ -225,7 +259,10 @@ class FancyNetwork:
             if cfg.get('show_edge_label',True):
                 weight=data.get('weight',1)
                 symbol=cfg.get('edge_label_symbol')
-                label=symbol*int(weight) if symbol else f'{weight:g}'
+                if symbol == '|' and float(weight).is_integer():
+                    self._draw_edge_ticks(ax, line, int(weight), cfg)
+                    continue
+                label=symbol*int(weight) if symbol and symbol != '|' else f'{weight:g}'
                 size=cfg.get('edge_label_size',8)
                 tw,th,_=renderer.get_text_width_height_descent(label,FontProperties(size=size),False)
                 half=np.array([tw,th])*36/ax.figure.dpi+2
@@ -254,6 +291,7 @@ class FancyNetwork:
                 ax.text(*point,str(node),fontsize=cfg.get('node_label_size',10),weight='semibold',
                         color=cfg.get('node_label_color','black'),ha='center',va='center',zorder=5)
 
+    @plot_fonts()
     def plot(self):
         cfg=self.config['plot']
         width,height=72*cfg.get('width',10),72*cfg.get('height',8)

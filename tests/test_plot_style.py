@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.collections import LineCollection
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -15,6 +16,66 @@ from test_gene_coordinates import coordinate_inputs
 
 
 class PlotStyleValidation(unittest.TestCase):
+    def draw_network_edge(self, endpoint, symbol='|', weight=6, style='line', show=True):
+        obj = FancyNetwork.__new__(FancyNetwork)
+        obj.network = nx.Graph()
+        obj.network.add_edge('A', 'B', weight=weight)
+        obj.config = {'plot': {'show_edge_label': show, 'edge_label_symbol': symbol,
+                               'edge_label_size': 8, 'edge_style': style}}
+        obj.node_sizes = {'A': 1, 'B': 1}
+        obj.hap_composition = {}
+        obj.group_colors = {}
+        fig = plt.figure(figsize=(5, 3), dpi=100)
+        self.addCleanup(plt.close, fig)
+        ax = fig.add_axes([0, 0, 1, 1], xlim=(0, 200), ylim=(0, 200))
+        positions = {'A': np.array([30., 30.]), 'B': np.array(endpoint, dtype=float)}
+        obj._draw_graph(ax, positions, {'A': 8., 'B': 8.}, 256)
+        fig.canvas.draw()
+        marks = [c for c in ax.collections if isinstance(c, LineCollection)]
+        return fig, ax, marks
+
+    def test_edge_ticks_count_position_and_perpendicular_direction(self):
+        for endpoint in ([170, 30], [30, 170], [170, 150]):
+            for style in ('line', 'curve'):
+                with self.subTest(endpoint=endpoint, style=style):
+                    fig, ax, marks = self.draw_network_edge(endpoint, style=style)
+                    self.assertEqual(len(marks), 1)
+                    self.assertFalse(ax.texts)
+                    segments = np.array(marks[0].get_segments())
+                    self.assertEqual(len(segments), 6)
+                    display = ax.transData.transform(segments.reshape(-1, 2)).reshape(-1, 2, 2)
+                    path = ax.transData.transform(ax.lines[0].get_xydata())
+                    vectors = np.diff(path, axis=0)
+                    centers = display.mean(axis=1)
+                    lengths = np.linalg.norm(vectors, axis=1)
+                    arcs = []
+                    for center, segment in zip(centers, display):
+                        fractions = np.clip(np.sum((center-path[:-1])*vectors, axis=1) / lengths**2, 0, 1)
+                        projections = path[:-1] + fractions[:, None]*vectors
+                        nearest = np.argmin(np.linalg.norm(projections-center, axis=1))
+                        np.testing.assert_allclose(projections[nearest], center, atol=1e-8)
+                        self.assertAlmostEqual(np.dot(segment[1]-segment[0], vectors[nearest]), 0, places=7)
+                        arcs.append(lengths[:nearest].sum()+fractions[nearest]*lengths[nearest])
+                    np.testing.assert_allclose(np.diff(arcs), np.diff(arcs)[0], atol=1e-8)
+                    self.assertGreater(arcs[0], 0)
+                    self.assertLess(arcs[-1], lengths.sum())
+                    self.assertAlmostEqual(arcs[0]+arcs[-1], lengths.sum(), places=7)
+
+    def test_edge_ticks_keep_weights_and_label_visibility(self):
+        for weight, expected in [(0, 0), (1, 1), (18, 18)]:
+            with self.subTest(weight=weight):
+                _, ax, marks = self.draw_network_edge([170, 150], weight=weight)
+                self.assertEqual(sum(len(c.get_segments()) for c in marks), expected)
+                self.assertFalse(ax.texts)
+        _, ax, marks = self.draw_network_edge([170, 150], show=False)
+        self.assertFalse(marks)
+        self.assertFalse(ax.texts)
+        for symbol, weight, label in [(None, 6, '6'), ('*', 3, '***'), ('|', 2.5, '2.5')]:
+            with self.subTest(symbol=symbol, weight=weight):
+                _, ax, marks = self.draw_network_edge([170, 150], symbol=symbol, weight=weight)
+                self.assertFalse(marks)
+                self.assertEqual([t.get_text() for t in ax.texts], [label])
+
     def test_default_network_palette_matches_pi_group_order(self):
         obj=FancyNetwork.__new__(FancyNetwork)
         groups=['Panel1','Panel2','Panel3']

@@ -37,7 +37,7 @@ dynamic = ["version"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-"hastat.conf" = ["GemmaPipelineConfig.toml", "bar.toml", "bar.mplstyle"]
+"hastat.conf" = ["bar.toml", "bar.mplstyle"]
 
 [tool.setuptools.dynamic]
 version = {attr = "hastat.__version__"}

@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import axes
 import matplotlib.pyplot as plt
-from hastat.viz._export import save_figure
+from hastat.viz._export import plot_fonts, save_figure
 from matplotlib.colors import LinearSegmentedColormap
 from hastat.dataio.table import read_sample_csv, normalize_sample_table, select_haplotypes, merge_samples, grouped_counts
 
@@ -60,6 +60,7 @@ class HapBar(object):
         self.merge_data()
         return grouped_counts(self.data, name, calc_percentage)
 
+    @plot_fonts()
     def plot(self, ax: axes.Axes = None):
         if ax is None:
             fig, ax = plt.subplots(figsize=(self.config['plot']['width'], self.config['plot']['height']))

@@ -48,7 +48,8 @@ class InputCLIValidation(unittest.TestCase):
                 self.assertNotIn('Traceback', result.stderr)
 
     def test_help_and_version(self):
-        for args in (('--help',), ('plot', '--help'), ('view', '--help'), ('plot', 'network', '--help')):
+        for args in (('--help',), ('plot', '--help'), ('view', '--help'),
+                     ('stat', '--help'), ('network', '--help'), ('plot', 'network', '--help')):
             result = self.cli(*args)
             self.assertEqual(result.returncode, 0, result.stderr)
         help_text = self.cli('view', '--help').stdout

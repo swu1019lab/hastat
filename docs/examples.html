@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="hastat documentation: gene haplotypes, population statistics, phenotype association, networks and visualization."><title>Complete examples · hastat</title><link rel="stylesheet" href="assets/docs.css"><script src="assets/docs.js" defer></script></head><body><a class="skip-link" href="#main">Skip to content</a><header class="topbar"><button class="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">☰</button><a class="brand" href="index.html">hastat<span class="version">2.0.0</span></a><nav class="top-links" aria-label="Main navigation"><a href="index.html">Reference</a><a href="examples.html" aria-current="page">Examples</a><a href="gallery.html">Gallery</a><a class="repo-link" href="https://github.com/swu1019lab/hastat">GitHub ↗</a></nav></header><aside class="sidebar" id="sidebar"><nav aria-label="Documentation sections"><p class="nav-caption">Start here</p><a class="" href="index.html#overview">Overview</a><a class="" href="index.html#installation">Installation</a><a class="" href="index.html#inputs">Input files</a><p class="nav-caption">Command reference</p><a class="" href="index.html#view"><span class="nav-code">view</span></a><a class="" href="index.html#statistics"><span class="nav-code">stat</span></a><a class="" href="index.html#network"><span class="nav-code">network</span></a><a class="" href="index.html#plot"><span class="nav-code">plot</span></a><a class="sub-link" href="index.html#plot-bar">Bar & pie</a><a class="sub-link" href="index.html#plot-box">Phenotype box plots</a><a class="sub-link" href="index.html#plot-network">Network plots</a><a class="sub-link" href="index.html#plot-gene">Gene haplotype plots</a><p class="nav-caption">Gene configuration</p><a class="" href="index.html#gene-config">TOML settings</a><a class="" href="index.html#gene-coordinates">Coordinates & tracks</a><p class="nav-caption">Resources</p><a class="" href="index.html#examples">Examples & downloads</a><a class="" href="index.html#exports">Figure exports</a></nav><div class="sidebar-bottom"><a href="examples/gene_tracks.toml">Recommended TOML ↗</a><a href="examples/commands.sh">Example commands ↗</a></div></aside><main class="page" id="main"><article class="article example-article"><p class="eyebrow">Examples / Synthetic data</p><h1>Complete graphical examples</h1>
+<p>These five examples use <strong>160 synthetic samples, eight haplotypes and 48
+displayed variants</strong>, with Wild, Landrace and Cultivar population assignments.
+Browse the figures in the <a href="gallery.html">gallery</a>.</p>
+<p>After installing hastat, run from the repository root:</p>
+<pre><code>bash docs/examples/commands.sh
+</code></pre>
+<p>The script creates <code>docs/images/gene_tracks.pdf</code>, <code>docs/images/mst.png</code>
+and <code>docs/images/msn.png</code>.
+Run the tutorial commands below from <code>docs/examples</code>.</p>
+<h2 id="inputs">Inputs</h2>
+<table>
+<thead><tr>
+<th style="text-align:left">File</th>
+<th style="text-align:left">Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><a href="examples/gene.table.csv">gene.table.csv</a></td>
+<td style="text-align:left">chrom,pos,ref,alt followed by eight haplotype genotype-state columns; 48 rows.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/gene.group.csv">gene.group.csv</a></td>
+<td style="text-align:left">Unique samples,haplotypes assignments; supplies sample counts.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/populations.csv">populations.csv</a></td>
+<td style="text-align:left">Sample ID and material type (Wild, Landrace or Cultivar). Used for network pies, allele frequencies, window statistics, and bar and pie counts.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/phenotypes.csv">phenotypes.csv</a></td>
+<td style="text-align:left">samples,Trait numerical observations.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/genes.gff3">genes.gff3</a></td>
+<td style="text-align:left">GeneA, chromosome 1, bases 2,000,001–2,004,000, plus strand and five CDS blocks.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/hap_colors.csv">hap_colors.csv</a></td>
+<td style="text-align:left">Haplotype row colors: group1 contains Hap1–3, group2 contains Hap6–7, and group3 contains Hap4, Hap5 and Hap8. The CSV has no header.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/annotations.csv">annotations.csv</a></td>
+<td style="text-align:left">Positions and categories for the 48 plotted variants, with optional labels on two CDS sites.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/gene.pi.csv">gene.pi.csv</a>, <a href="examples/gene.fst.csv">gene.fst.csv</a></td>
+<td style="text-align:left">41 windows from 1,000,001 to 3,004,000 per series: π for each material type and Fst for each pair of types. Window size and step are both 50 kb.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/gene.vcf">gene.vcf</a></td>
+<td style="text-align:left">Diploid genotypes for all 160 samples, including the 48 displayed variants and additional flanking sites used in the statistics tracks.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/gene.vcf.gz">gene.vcf.gz</a> and <a href="examples/gene.vcf.gz.tbi">its tabix index</a></td>
+<td style="text-align:left">Indexed copy used directly by the gene figure.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/gene.tajima_d.csv">gene.tajima_d.csv</a></td>
+<td style="text-align:left">Tajima's D for the three material types, using the same 41 windows as π and Fst. The last window is clipped at 3,004,000.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/gene_tracks.toml">gene_tracks.toml</a></td>
+<td style="text-align:left">Complete gene-plot configuration, including frequency and window tracks.</td>
+</tr>
+<tr>
+<td style="text-align:left"><a href="examples/gene.mst.csv">gene.mst.csv</a>, <a href="examples/gene.msn.csv">gene.msn.csv</a></td>
+<td style="text-align:left">MST and MSN edges generated from the same 48-variant table.</td>
+</tr>
+</tbody>
+</table>
+<p>Coordinates are 1-based inclusive. The 48-site haplotype matrix uses homozygous states
+0 (reference) and 2 (alternate); the tool also recognizes 1 (heterozygous) and -1
+(missing).</p>
+<h2 id="example-1">1. Population sample counts</h2>
+<p><img src="images/bar.png" alt="Population sample counts"></p>
+<pre><code class="lang-bash">hastat plot bar --sample_hap gene.group.csv --sample_group populations.csv --x_label Material --y_label Samples --width 10 --height 4 -o ../images/bar.png
+</code></pre>
+<p>Bars show haplotype sample counts within each population.
+For relative composition, add <code>--calc_percentage</code> and use <code>--y_label Fraction</code>:
+that option returns values between 0 and 1.</p>
+<h2 id="example-2">2. Population composition</h2>
+<p><img src="images/pie.png" alt="Population composition"></p>
+<pre><code class="lang-bash">hastat plot pie --sample_hap gene.group.csv --sample_group populations.csv --width 11 --height 4 -o ../images/pie.png
+</code></pre>
+<p>Pies show haplotype proportions and sample totals for each population.</p>
+<h2 id="example-3">3. Trait distributions and comparisons</h2>
+<p><img src="images/box.png" alt="Trait distributions"></p>
+<pre><code class="lang-bash">hastat plot box --sample_hap gene.group.csv --sample_phe phenotypes.csv --method TukeyHSD --comparisons Hap1 Hap2 --comparisons Hap1 Hap4 --comparisons Hap1 Hap8 --width 10 --height 5 -o ../images/box.png
+</code></pre>
+<p>Points show observations; boxes show medians and interquartile ranges.
+Whiskers extend to the most extreme observations within 1.5 interquartile ranges.
+The three displayed comparisons use Tukey-adjusted P values from the full
+eight-haplotype family (28 pairwise comparisons). <code>--comparisons</code> selects the
+pairs to display. Symbols: <strong>* &lt; 0.001, </strong> &lt; 0.01, * &lt; 0.05, ns ≥ 0.05.
+TukeyHSD assumes independent observations, approximately normal within-group
+errors and common within-group variance.</p>
+<h2 id="example-4">4. Minimum spanning tree and network</h2>
+<p><img src="images/mst_msn.png" alt="MST and MSN at the same node positions"></p>
+<p>Generate both networks from the haplotype table, then draw each network with
+the same sample and population assignments:</p>
+<pre><code class="lang-bash">hastat network -t gene.table.csv -m MST -o gene.mst.csv
+hastat network -t gene.table.csv -m MSN -o gene.msn.csv
+hastat plot network --file gene.mst.csv --sample_hap gene.group.csv --sample_group populations.csv --show_node_label --node_label_size 8.3 --show_edge_label --edge_label_size 8.4 --node_alpha 1 --width 6 --height 6 -o ../images/mst.png
+hastat plot network --file gene.msn.csv --sample_hap gene.group.csv --sample_group populations.csv --show_node_label --node_label_size 8.3 --show_edge_label --edge_label_size 8.4 --node_alpha 1 --width 6 --height 6 -o ../images/msn.png
+</code></pre>
+<p><code>--show_node_label</code> displays haplotype names; <code>--show_edge_label</code> displays
+genotype difference counts. Use <code>--edge_label_symbol "|"</code> for tick marks and
+<code>--edge_label_size</code> to adjust their size.</p>
+<p>The MST has seven edges. The MSN adds three equal-cost alternatives, shown as
+dashed lines. Node area represents sample count; pie sectors show population
+composition. Counts use matched samples with valid population assignments.</p>
+<h2 id="example-5">5. Gene haplotypes with 1 Mb flanks</h2>
+<p><img src="images/gene_tracks.png" alt="Complete gene haplotype figure"></p>
+<p>Use the <a href="examples/gene_tracks.toml">recommended GeneA TOML</a> with the supplied
+<a href="#inputs">example inputs</a>, including the indexed VCF. The three statistics
+CSVs are supplied with the example. To calculate them from the same VCF and
+population assignments, run:</p>
+<pre><code class="lang-bash">hastat view -v gene.vcf.gz -r 1:1000001-3004000 -g populations.csv -t pi --size 50000 --step 50000 -o gene
+hastat view -v gene.vcf.gz -r 1:1000001-3004000 -g populations.csv -t fst --size 50000 --step 50000 -o gene
+hastat view -v gene.vcf.gz -r 1:1000001-3004000 -g populations.csv -t tajima_d --size 50000 --step 50000 -o gene
+</code></pre>
+<p>Draw the complete figure using those CSVs and the recommended configuration:</p>
+<pre><code class="lang-bash">hastat plot gene --gff genes.gff3 --gene GeneA --up 2000 --down 2000 --width 15 --height 17.17300419287212 --toml gene_tracks.toml -o ../images/gene_tracks.png
+</code></pre>
+<p><code>[default]</code> supplies shared settings; <code>[GeneA]</code> overrides them for this gene.
+Paths are relative to the TOML file. See the <a href="index.html#gene-config">TOML reference</a>
+for all configuration options.</p>
+<p>The gene view includes 2 kb flanks. Statistics tracks use the supplied 50 kb
+windows spanning 1 Mb flanks. Pi is displayed in units of 10⁻³; undefined
+estimates appear as gaps. <code>shade_gene = true</code> marks the gene interval.</p>
+<p><code>hap_file = "gene"</code> reads <code>gene.table.csv</code> and optionally <code>gene.group.csv</code> for
+sample counts. <code>hap_color_file</code> assigns haplotype color categories.
+<code>ann_file</code> supplies variant annotations, with an optional <code>label</code> column.</p>
+<p>AF uses called alleles from <code>vcf_file</code>, grouped by <code>pop_file</code>. LD is calculated
+from all VCF samples for the displayed variants. Set <code>ld_show = false</code> to hide
+LD; <code>ld_cmap</code> and <code>ld_colorbar</code> control its palette and color scale.</p>
+<footer class="footer"><span>hastat 2.0.0 · Gene haplotype analysis</span><span><a href="https://github.com/swu1019lab/hastat">Source code</a> · <a href="https://doi.org/10.1093/hr/uhag018">Cite hastat</a></span></footer></article></main><div id="copy-status" class="status-text" role="status" aria-live="polite"></div></body></html>

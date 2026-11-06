@@ -27,7 +27,6 @@
 | 📊 **`stat`** | Perform robust statistical analysis (ANOVA, multiple comparisons) linking haplotypes to phenotypes. |
 | 🎨 **`plot`** | Generate high-quality visualizations: Bar, Pie, Box, Network, and Gene haplotype plots. |
 | 🕸️ **`network`** | Construct haplotype networks using Minimum Spanning Tree (MST) and Minimum Spanning Network (MSN). |
-| 🔬 **`gwas`** | Integrated wrapper for GEMMA to perform Genome-Wide Association Studies. |
 
 ### Advanced Capabilities
 - ✅ **Multi-population Analysis**: Compare haplotype frequencies and diversity across different groups.
@@ -129,85 +128,23 @@ hastat --help
 
 ## 🖼️ Example results
 
-The [illustrated gallery](docs/gallery.html) shows a gene haplotype plot with
-1 Mb flanks and an MST/MSN comparison built from the same eight haplotypes.
-Both use 160 synthetic samples: 49 Wild, 61 Landrace and 50 Cultivar.
-The [example guide](docs/EXAMPLES.md) also covers bar, pie and phenotype box plots.
+Examples use 160 synthetic samples and eight haplotypes. See the
+[gallery](https://swu1019lab.github.io/hastat/gallery.html) and [example guide](https://swu1019lab.github.io/hastat/examples.html) for inputs and commands.
 
 ### Gene haplotypes with 1 Mb flanks
 
-One combined figure shows five CDS blocks, both 2 kb flanks, variant annotations,
-48 variant columns, eight clustered haplotypes, sample counts, category colors,
-population REF/ALT allele frequencies, a whole-VCF LD heatmap, three population Pi series and all three pairwise
-Fst series, and Tajima's D for each material type. The gene model spans 8 kb,
-including 2 kb on each side of GeneA. The three statistics tracks span
-chromosome 1 from 1,000,001 to 3,004,000, with 1 Mb on each side of the gene.
+Gene structure, haplotypes, variant annotations, allele frequencies and LD,
+with π, Fst and Tajima’s D tracks spanning 1 Mb flanks.
 
-`hap_file = "gene"` reads `gene.table.csv` and discovers `gene.group.csv` for
-labels such as `Hap1 (n=36)`. The legend below the tree identifies the row colors
-from `hap_color_file`: group1 for Hap1–3, group2 for Hap6–7, and group3 for
-Hap4, Hap5 and Hap8. At the first displayed variant (1:1,998,150), only Hap2 and Hap3 carry
-ALT. Counting allele copies by sample material gives 40/98 (40.8%) in Wild,
-46/122 (37.7%) in Landrace and 22/100 (22.0%) in Cultivar.
-Average linkage uses Hamming distances. White/dark-blue cells represent
-reference/alternate homozygotes. The annotation band lines up with the variant
-columns. Its colors denote categories, and selected short labels point to their
-genomic positions. Each population frequency strip counts called alleles:
-a heterozygote contributes one REF and one ALT. Missing genotypes contribute
-neither. The LD triangle uses all VCF samples and the exact displayed variant
-keys. Its width follows the matrix and its height is half that width.
-
-```toml
-ann_file = "annotations.csv"    # chrom,pos,ann and an optional short label column
-pop_file = "populations.csv"    # samples,material for separate frequency strips
-vcf_file = "gene.vcf.gz"        # indexed diploid genotypes for AF and LD
-af_show = true                 # REF/ALT allele frequencies
-ld_show = true                 # whole-population LD triangle
-ld_cmap = "Blues"
-ld_colorbar = true
-shade_gene = true              # gray gene interval on Pi, Fst and Tajima's D
-```
-
-Without `pop_file`, one strip represents all samples. Frequencies use the VCF
-when supplied, or the counts in `<prefix>.group.csv` and genotype states in the
-haplotype table. Without either source the frequency track is skipped.
-Filtering displayed Hap rows does not change the sample denominator.
-The [recommended GeneA configuration](docs/examples/gene_tracks.toml) and
-[example command](docs/examples/commands.sh) reproduce the complete figure.
-From `docs/examples`, run:
-
-```bash
-hastat plot gene --gff genes.gff3 --gene GeneA --up 2000 --down 2000 --width 15 --height 17.17300419287212 --toml gene_tracks.toml -o gene_tracks.pdf
-```
-
-The command selects the gene, flanks and canvas size. The TOML sets shared track
-options in `[default]`; `[GeneA]` overrides only the settings specific to GeneA.
-It places Pi, Fst and Tajima's D above the gene. A single
-row centered above the gene explains the annotation colors. Below the
-gene, the annotation strip, haplotype matrix and REF/ALT frequencies share the
-variant columns with the LD triangle at the bottom.
-
-The gene model and statistics tracks align at the panel edges and use different
-genomic scales. Matrix columns remain equally spaced. Pi/Fst/Tajima's D values are read from
-existing window CSVs; the plotting command does not recalculate them.
-A single `>` or `<` at the strand-direction end marks orientation. The marker
-has no connecting tail, and the gene backbone ends at the gene boundary.
+[Recommended TOML](docs/examples/gene_tracks.toml) · [Reproduction commands](docs/examples/commands.sh)
 
 ![Gene and haplotypes aligned with Pi, Fst and Tajima's D windows](docs/images/gene_tracks.png)
 
 ### MST and MSN haplotype networks
 
-The MST connects the eight haplotypes with seven edges. The MSN adds three
-equal-cost alternatives, drawn with dashed lines. Both panels use identical
-node positions and use the same sample counts. Pie sectors show the Wild,
-Landrace and Cultivar fractions from [synthetic material assignments](docs/examples/populations.csv).
-Circle area is proportional to sample count, with a nested size legend.
-Each edge label counts differing genotype states.
+MST and MSN networks showing sample counts, population composition and differences between haplotypes.
 
 ![Minimum spanning tree and minimum spanning network of the eight haplotypes](docs/images/mst_msn.png)
-
-The [example guide](docs/EXAMPLES.md) includes exact commands, input schemas,
-TOML settings, interpretation notes and editable PDF/SVG downloads.
 
 ## 🚀 Usage
 
@@ -553,213 +490,9 @@ hastat view -t fst \
 
 ## 📚 Documentation
 
-<details>
-<summary><strong>1. View Module (`hastat view`)</strong></summary>
+Read the [web documentation](https://swu1019lab.github.io/hastat/) for command-line options, input formats and gene-plot TOML settings.
 
-The `view` module is the entry point for extracting and analyzing genetic data. It supports flexible input methods and various analysis types.
-
-#### Input Modes
-| Mode | Argument | Description |
-|:---|:---|:---|
-| **Single Gene** | `-i GeneID` | Analyze a specific gene. Requires `-a/--gff`. |
-| **Region** | `-r chr:start-end` | Analyze a specific genomic region (e.g., `chr1:1000-2000`). |
-| **Batch Genes** | `-l list.txt` | Analyze a list of genes provided in a file (one ID per line). Requires `-a/--gff`. |
-| **Homologous** | `--homo ID1,ID2` | Analyze multiple homologous genes simultaneously. Requires `-a/--gff`. |
-
-#### Region Control
-You can extend the analysis region (e.g., to include promoters) using:
-- `-u, --up <int>`: Extend $N$ bp upstream.
-- `-d, --down <int>`: Extend $N$ bp downstream.
-
-#### Analysis Types (`-t, --type`)
-- **`geno`**: Extract genotype matrix.
-- **`table`**: Generate haplotype table.
-- **`group`**: Group samples by haplotypes.
-- **`freq`**: Calculate haplotype frequencies.
-- **`compare`**: Compare haplotypes across multiple populations (VCFs).
-- **`pi`**: Calculate Nucleotide Diversity ($\pi$).
-- **`fst`**: Calculate Fixation Index ($F_{ST}$).
-
-#### Population Genetics Statistics ($\pi$ & $F_{ST}$)
-For `pi` and `fst` analysis, `hastat` uses a sliding window approach:
-- **Windowing**: Controlled by `-w/--size` (window size, default 1bp) and `-s/--step` (step size, default 1bp).
-- **Grouping**: Requires a sample group file via `-g/--group` (csv: sample,group).
-- **Calculation**:
-    - **$\pi$**: Calculated for each group in the window.
-    - **$F_{ST}$**: Calculated for all pairwise combinations of groups in the window.
-    - **Region**: The analysis region is determined by the gene/region input plus any upstream/downstream extension.
-
-**Example:** Calculate $F_{ST}$ for a gene plus 2kb upstream, using 1kb windows with 100bp step:
-```bash
-hastat view -v data.vcf.gz -a ann.gff3 -i GeneID -u 2000 -t fst -g groups.csv --size 1000 --step 100
-```
-</details>
-
-<details>
-<summary><strong>2. Statistics Module (`hastat stat`)</strong></summary>
-
-Perform statistical tests (ANOVA, TukeyHSD).
-
-| Argument | Description |
-|:---|:---|
-| `-g, --group` | Haplotype group CSV file. Required. |
-| `-p, --pheno` | Phenotype CSV file. Required. |
-| `-m, --method` | Method: `TukeyHSD` (default) or `WelchBonferroni`. |
-| `-s, --min_hap_size` | Minimum sample size per haplotype (default: 10). |
-</details>
-
-<details>
-<summary><strong>3. Network Module (`hastat network`)</strong></summary>
-
-Construct haplotype networks.
-
-| Argument | Description |
-|:---|:---|
-| `-t, --hap_table` | Haplotype table from `view -t table`. Required. |
-| `-m, --method` | `MST` (Minimum Spanning Tree) or `MSN`. |
-| `-o, --out` | Output file; CSV, TXT/edgelist, GEXF and GML are supported. |
-
-`MST` returns one minimum spanning tree with deterministic tie handling. `MSN`
-includes all equal-weight alternatives occurring in any minimum spanning tree.
-Distances count
-unequal 0/1/2 states on loci complete across all input haplotypes. Loci containing
-`-1` or missing calls are excluded for every pair; no complete loci produces an
-error. Zero-distance haplotypes retain their distinct names.
-
-Single haplotypes survive export and plotting input. Network CSV uses the
-`source,target,weight,type` columns: an isolated node uses `type=node`
-with empty target and weight. TXT stores an isolated node as a `#node` comment
-understood by hastat; use GEXF/GML when another application must retain it.
-</details>
-
-<details>
-<summary><strong>4. Plot Module (`hastat plot`)</strong></summary>
-
-Visualize results. Subcommands: `bar`, `pie`, `box`, `network`, `gene`.
-
-**Common Arguments:**
-- `-o, --output`: Output file path.
-- `--width`, `--height`: Figure dimensions.
-
-**Subcommand Specifics:**
-- **`bar` / `pie`**: Requires `--sample_hap`, `--sample_group`.
-- **`box`**: Requires `--sample_hap`, `--sample_phe`, `--comparisons`.
-- **`network`**: Pass one network file to `--file`. Weighted Kamada–Kawai is the default layout.
-- **`gene`**: Requires `--gff`, `--gene`, `--toml` and `-o`. Set flanks with `--up` and `--down`, and canvas dimensions with `--width` and `--height`.
-
-**Gene Plot Configuration (`gene.toml`):**
-Control the appearance of gene structure plots using a TOML file.
-
-Each call draws one gene. Settings in `[default]` apply to every gene. The section matching
-`--gene` overrides those defaults for that gene. Unknown parameters produce a warning and are skipped.
-
-Paths inside this TOML are relative to the TOML file's directory (absolute paths
-are also accepted). A specified missing or unreadable file causes an error.
-Pi/Fst tracks accept the existing `view` CSV outputs, preserve literal chromosome
-and group labels, show single-window values as points, and retain NaN gaps and
-negative Fst estimates.
-
-| Parameter | Type | Description | Default |
-|:---|:---|:---|:---|
-| **Panel layout** | | | |
-| `layout` | string | `fixed` uses the bbox-relative track positions, independently of the input files. Choose `auto` to stack tracks without specifying window, AF or LD Y positions. | `"fixed"` |
-| `bbox` | list | Panel bounds `[x, y, width, height]`. All tracks span its full width. | `[0.1, 0.1, 0.8, 0.8]` |
-| **Gene structure** | | | |
-| `gene_y` | float | Vertical center of the gene within the panel. | `0.5` |
-| `gene_height` | float | Gene height relative to bbox. | `0.2` |
-| `gene_color` | string | Gene color. | `"C1"` |
-| `gene_feature` | string | Feature to plot (e.g., "CDS", "exon"). | `"CDS"` |
-| `gene_label_show` | bool | Whether to show gene name label. | `true` |
-| `gene_label_size` | int | Font size for gene label. | `10` |
-| **Annotation** | | | |
-| `ann_file` | string | Annotation CSV with chrom,pos,ann and optional label. Include ref and alt together for allele-specific annotations. | `""` |
-| `ann_y` | float | Optional first label row relative to the gene bbox. | automatic |
-| `ann_band_y` | float | Bottom of the annotation strip relative to the bbox. | above matrix |
-| `ann_legend_y` | float | Bottom of the annotation legend relative to the bbox. | above callouts |
-| `ann_text_size` | int | Font size for annotation text. | `8` |
-| **Haplotypes** | | | |
-| `hap_file` | string | Input prefix: reads `<prefix>.table.csv` and automatically uses `<prefix>.group.csv` for sample counts if present. An explicit `.table.csv` path is also accepted. | `""` |
-| `hap_y` | float | Y position for haplotype matrix relative to bbox. | `0.0` |
-| `hap_height` | float | Height of haplotype matrix relative to bbox. | `0.3` |
-| `hap_cols` | list | List of specific haplotypes to show (empty for all). | `[]` |
-| `hap_label_show` | bool | Whether to show haplotype labels. | `true` |
-| `hap_label_size` | int | Font size for haplotype labels. | `8` |
-| `hap_count_show` | bool | Show assigned sample counts as `Hap1 (n=25)` when the matching `.group.csv` exists. | `true` when `.group.csv` exists |
-| **Haplotype Groups** | | | |
-| `hap_color_file` | string | Optional headerless CSV: haplotype, category. The row colors and lower-left legend identify the categories of displayed haplotypes. | `""` |
-| `hap_group_bar_x` | float | X position offset for group bar. | `-0.12` |
-| `hap_group_bar_width` | float | Width of group bar. | `0.02` |
-| `hap_cluster_show` | bool | Show a Hamming-distance hierarchical tree; missing loci are excluded consistently across displayed haplotypes. | `false` |
-| `hap_cluster_linkage` | string | `average`, `complete`, `single` or `weighted`. Ward/centroid/median are incompatible with this distance. | `"average"` |
-| `af_show` | bool | Draw per-site REF/ALT allele frequencies. | `true` |
-| `pop_file` | string | Optional two-column sample/population CSV for allele frequency tracks. | `""` |
-| `vcf_file` | string | Indexed diploid VCF for allele frequencies and LD. | `""` |
-| `ld_show` | bool | Draw the whole-population LD triangle using `vcf_file`. Its height is half its physical width. | `false` |
-| `ld_y` | float | Top of the downward LD triangle relative to the bbox, in fixed layout. | below AF or matrix |
-| `ld_cmap` | string | Matplotlib colormap for r², on a fixed 0–1 scale. Undefined pairs are gray. | `"Blues"` |
-| `ld_colorbar` | bool | Show the LD color scale. | `true` |
-| `shade_gene` | bool | Shade the annotated gene interval on Pi, Fst and Tajima's D tracks. | `false` |
-| `af_height` | float | Height of each frequency track. | `0.05` |
-| `af_y` | float | Bottom of the frequency strips relative to the bbox, in fixed layout. | `0` |
-| `af_style` | string | Plot type: `"bar"` or `"pie"`. | `"bar"` |
-| **Tracks (Pi/Fst/Tajima's D)** | | | |
-| `pi_file` | string | Path to Pi data CSV file. | `""` |
-| `pi_y` | float | Bottom of the Pi plot relative to the bbox. | `0.55` |
-| `pi_height` | float | Height of Pi plot. | `0.2` |
-| `pi_style` | string | Plot style: `"line"` or `"fill"`. | `"fill"` |
-| `fst_file` | string | Path to Fst data CSV file. | `""` |
-| `fst_y` | float | Y position for Fst plot. | `0.8` |
-| `fst_height` | float | Height of Fst plot. | `0.2` |
-| `fst_style` | string | Plot style: `"line"` or `"fill"`. | `"fill"` |
-| `tajima_d_file` | string | Path to the Tajima's D window CSV. | `""` |
-| `tajima_d_y` | float | Y position for the Tajima's D plot. | `0.3` |
-| `tajima_d_height` | float | Height of the Tajima's D plot. | `0.2` |
-| `tajima_d_style` | string | Plot style: `"line"` or `"fill"`. | `"fill"` |
-
-```toml
-[default]
-# Example configuration
-bbox = [0.1, 0.1, 0.8, 0.8]
-gene_color = "C1"
-gene_label_show = true
-hap_file = "gene"
-pi_file = "pi.csv"
-```
-
-The prefix above reads `gene.table.csv`; if `gene.group.csv` exists, sample counts
-are added automatically. If it is absent, labels show names only. Generate both
-files with the same region, samples and filters. Counts refer to unique assigned
-samples, not SNPs or chromosome copies, and stay with their names after selection
-and clustering. A present but malformed/mismatched group file is an error, even
-when counts are hidden. `hap_count_show=false` hides counts. `hap_color_file` accepts a headerless
-category file such as `Hap1,A` / `Hap2,B`.
-
-Clustering uses average linkage by default on Hamming distances across common
-complete loci. Singletons remain visible, two haplotypes form a one-branch tree,
-and tied distances are resolved from a stable ID order. Missing calls do not form
-a genotype category. No shared complete locus or an incompatible method causes
-an explicit error.
-
-Gene features, annotation targets and SNP connections use the gene and its
-requested flanks. Each Pi, Fst or Tajima's D track displays every window for
-the gene's chromosome in its CSV, from the smallest start to the largest end.
-If the CSV omits `chrom`, all rows are treated as windows on the gene's chromosome.
-The tracks align at the panel edges even when their genomic ranges differ.
-Coordinates increase left to right on both strands; the strand arrow
-indicates transcription direction. GFF feature lengths are inclusive, so a
-single-base feature remains visible. Haplotype matrix columns remain equally
-spaced; their connectors map back to physical positions.
-</details>
-
-<details>
-<summary><strong>5. GWAS Module (`hastat gwas`)</strong></summary>
-
-Run GWAS using GEMMA.
-
-| Argument | Description |
-|:---|:---|
-| `-c, --config` | Configuration TOML file. Required. |
-</details>
+Explore the [example guide](https://swu1019lab.github.io/hastat/examples.html) and [PNG gallery](https://swu1019lab.github.io/hastat/gallery.html) for complete workflows and figures.
 
 ---
 

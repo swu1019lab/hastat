@@ -10,7 +10,7 @@ from matplotlib import axes
 from collections import Counter
 from itertools import combinations
 import matplotlib.pyplot as plt
-from hastat.viz._export import save_figure
+from hastat.viz._export import plot_fonts, save_figure
 from scipy import stats
 from hastat.log.logger import logger
 from matplotlib.colors import LinearSegmentedColormap
@@ -217,6 +217,7 @@ class HapBox(object):
             data[x].append(y)
         return xdata, ydata, data, labels
 
+    @plot_fonts()
     def plot(self, ax: axes.Axes = None):
         if ax is None:
             fig, ax = plt.subplots(figsize=(self.config['plot']['width'], self.config['plot']['height']))

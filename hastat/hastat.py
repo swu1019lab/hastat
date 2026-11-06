@@ -8,7 +8,7 @@
 import argparse
 import logging
 from hastat.log.logger import logger
-from .func import view, stat, plot, gwas, network
+from .func import view, stat, plot, network
 
 
 def main():
@@ -176,9 +176,9 @@ def main():
     parser_network.add_argument('--show_edge_label', action='store_true', default=False,
                            help='Show edge weight labels (default: %(default)s)')
     parser_network.add_argument('--edge_label_symbol', type=str, default=None,
-                           help='Symbol to multiply with edge weights (e.g., "|" shows weight*symbol)')
+                           help='Use "|" for perpendicular edge ticks; other symbols repeat as text (default: numeric weights)')
     parser_network.add_argument('--edge_label_size', type=float, default=8,
-                           help='Edge label font size (default: %(default)s)')
+                           help='Edge label size in points; also scales tick length and spacing (default: %(default)s)')
     parser_network.add_argument('--edge_label_color', type=str, default='black',
                            help='Edge label color (default: %(default)s)')
     parser_network.add_argument('--node_scale_factor', type=float,
@@ -224,10 +224,6 @@ def main():
     parser_gene.add_argument('--height', type=float, default=8.0,
                             help='Figure height in inches (default: %(default)s)')
 
-    # gwas command
-    parser_gwas = subparsers.add_parser('gwas', help='Perform GWAS analysis using GEMMA wrapper')
-    parser_gwas.add_argument('-c', '--config', type=str, required=True, help='The configuration file for GWAS')
-
     # network command
     parser_network = subparsers.add_parser('network', help='Perform gene haplotype network analysis')
     parser_network.add_argument('-t', '--hap_table', type=str, required=True, 
@@ -245,7 +241,6 @@ def main():
     parser_pie.set_defaults(func=plot.run)
     parser_box.set_defaults(func=plot.run)
     parser_gene.set_defaults(func=plot.run)
-    parser_gwas.set_defaults(func=gwas.run)
     parser_network.set_defaults(func=network.run)
 
     args = parser.parse_args()

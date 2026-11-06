@@ -9,7 +9,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-from hastat.viz._export import save_figure
+from hastat.viz._export import plot_fonts, save_figure
 from hastat.viz import tracks
 from hastat.utils.population import ld_r_squared
 import matplotlib.patches as patches
@@ -876,6 +876,7 @@ class FancyGene(object):
                       height=max(height,cursor-y+.01*width),windows=windows)
         return layout
 
+    @plot_fonts()
     def plot(self):
         """Create the gene visualization plot."""
         self._count_label_layout = []

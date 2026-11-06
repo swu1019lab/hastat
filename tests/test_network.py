@@ -251,7 +251,7 @@ class NetworkValidation(unittest.TestCase):
         calls = []
         fake = SimpleNamespace(run=lambda args: calls.append(args.method))
         namespace = dict(argparse=argparse, logging=logging, logger=logging.getLogger('cli_contract'),
-                         view=fake, stat=fake, plot=fake, gwas=fake, network=network_command)
+                         view=fake, stat=fake, plot=fake, network=network_command)
         exec(compile(ast.Module(body=[main], type_ignores=[]), 'hastat/hastat.py', 'exec'), namespace)
         with tempfile.TemporaryDirectory() as tmp:
             source, output = Path(tmp) / 'input.csv', Path(tmp) / 'network.csv'

@@ -235,7 +235,7 @@ class HaplotypeValidation(unittest.TestCase):
         main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'main')
         fake = SimpleNamespace(run=lambda args: None)
         namespace = dict(argparse=argparse, logging=logging, logger=logging.getLogger('hap_cli'),
-                         view=view, stat=fake, plot=fake, gwas=fake, network=fake)
+                         view=view, stat=fake, plot=fake, network=fake)
         exec(compile(ast.Module(body=[main], type_ignores=[]), 'hastat/hastat.py', 'exec'), namespace)
         argv = ['hastat', 'view', '-v', path, '-a', str(gff), '--homo', 'g1,g2', '-t', 'freq',
                 '-g', str(group), '-o', str(self.root / 'multi')]

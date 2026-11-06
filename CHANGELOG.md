@@ -18,6 +18,12 @@
 - Update complete examples, the recommended TOML configuration,
   and the PNG gallery.
 
+- Add searchable web documentation with installation instructions, CLI and TOML references, detailed examples, and a PNG gallery.
+- Simplify README examples and link to the web documentation.
+- Render network genotype differences as perpendicular ticks on straight and curved edges.
+- Use Arial as the default plotting font and refresh all example figures.
+- Remove the GEMMA-based GWAS command and its bundled configuration.
+
 ## 1.1.0 (2026-11-01)
 
 - Corrected ANOVA and multiple comparisons, including cases with small groups, zero variance or inestimable contrasts. Use `WelchBonferroni` in place of `AllPairTest` for Welch’s ANOVA followed by pairwise Welch t-tests with Bonferroni correction.

@@ -6,6 +6,8 @@ include hastat.egg-info/dependency_links.txt hastat.egg-info/entry_points.txt
 include hastat.egg-info/requires.txt hastat.egg-info/top_level.txt
 include docs/EXAMPLES.md
 include docs/gallery.html
+include docs/index.html docs/examples.html docs/.nojekyll
+recursive-include docs/assets *.css *.js
 recursive-include docs/examples *.csv *.gff3 *.toml *.vcf commands.sh
 include docs/examples/gene.vcf.gz docs/examples/gene.vcf.gz.tbi
 recursive-include docs/images *.png *.pdf *.svg

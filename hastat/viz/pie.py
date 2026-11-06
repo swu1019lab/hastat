@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib as mpl
 from matplotlib import axes
 import matplotlib.pyplot as plt
-from hastat.viz._export import save_figure
+from hastat.viz._export import plot_fonts, save_figure
 from matplotlib.colors import LinearSegmentedColormap
 from hastat.dataio.table import read_sample_csv, normalize_sample_table, select_haplotypes, merge_samples, grouped_counts
 
@@ -65,6 +65,7 @@ class HapPie(object):
         self.merge_data()
         return grouped_counts(self.data, name, calc_percentage)
 
+    @plot_fonts()
     def plot(self, ax: axes.Axes = None):
         """
         Plot pie chart for haplotype data
