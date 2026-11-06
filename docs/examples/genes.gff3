@@ -1,6 +1,6 @@
-1	demo	gene	2501	6500	.	+	.	ID=GeneA
-1	demo	CDS	2501	2860	.	+	0	ID=C0;Parent=GeneA
-1	demo	CDS	3231	3600	.	+	0	ID=C1;Parent=GeneA
-1	demo	CDS	4091	4490	.	+	0	ID=C2;Parent=GeneA
-1	demo	CDS	5031	5490	.	+	0	ID=C3;Parent=GeneA
-1	demo	CDS	6061	6500	.	+	0	ID=C4;Parent=GeneA
+1	demo	gene	2000001	2004000	.	+	.	ID=GeneA
+1	demo	CDS	2000001	2000360	.	+	0	ID=C0;Parent=GeneA
+1	demo	CDS	2000731	2001100	.	+	0	ID=C1;Parent=GeneA
+1	demo	CDS	2001591	2001990	.	+	0	ID=C2;Parent=GeneA
+1	demo	CDS	2002531	2002990	.	+	0	ID=C3;Parent=GeneA
+1	demo	CDS	2003561	2004000	.	+	0	ID=C4;Parent=GeneA

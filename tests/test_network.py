@@ -1,4 +1,5 @@
 """Network algorithm and export integration checks; run in a PBS allocation."""
+from hastat.dataio.network import save_network
 import argparse
 import ast
 from importlib.util import find_spec
@@ -20,8 +21,8 @@ import pandas as pd
 
 from hastat.func import network as network_command
 from hastat.log.logger import logger
-from hastat.utils.gene import GeneHapNetwork
-from hastat.utils.network_io import read_network
+from hastat.utils.network import HaplotypeNetwork
+from hastat.dataio.network import read_network
 from hastat.viz.network import FancyNetwork
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,8 +39,8 @@ def weighted_edges(graph):
 
 
 def make_network(frame, method='MSN'):
-    net = GeneHapNetwork()
-    net.add_edge(frame)
+    net = HaplotypeNetwork()
+    net.set_haplotypes(frame)
     net.create_network(method)
     return net
 
@@ -79,7 +80,7 @@ def write_table(path, frame):
 class NetworkValidation(unittest.TestCase):
     def assert_oracle(self, nodes, edges):
         minimum, union, _ = brute_force_tree_union(nodes, edges)
-        net = GeneHapNetwork()
+        net = HaplotypeNetwork()
         net.nodes, net.edge_data = nodes, edges
         net.create_network('MSN')
         self.assertEqual(edge_set(net.network), union)
@@ -125,15 +126,15 @@ class NetworkValidation(unittest.TestCase):
 
     def test_missing_loci_are_excluded_for_every_pair(self):
         frame = pd.DataFrame({'A': [0, -1, 0, 2], 'B': [1, 1, np.nan, 2], 'C': [1, 0, 1, 0]})
-        self.assertEqual(GeneHapNetwork().calc_hamming_distance(frame), [('A', 'B', 1), ('A', 'C', 2), ('B', 'C', 1)])
+        self.assertEqual(HaplotypeNetwork().calculate_haplotype_distances(frame), [('A', 'B', 1), ('A', 'C', 2), ('B', 'C', 1)])
         # Even the two observed entries at an excluded locus must not affect distance.
         frame.loc[1, ['B', 'C']] = [2, 2]
         frame.loc[2, ['A', 'C']] = [2, 2]
-        self.assertEqual(GeneHapNetwork().calc_hamming_distance(frame), [('A', 'B', 1), ('A', 'C', 2), ('B', 'C', 1)])
+        self.assertEqual(HaplotypeNetwork().calculate_haplotype_distances(frame), [('A', 'B', 1), ('A', 'C', 2), ('B', 'C', 1)])
 
     def test_state_distance_is_not_dosage_distance(self):
         frame = pd.DataFrame({'A': [0], 'B': [2]})
-        self.assertEqual(GeneHapNetwork().calc_hamming_distance(frame), [('A', 'B', 1)])
+        self.assertEqual(HaplotypeNetwork().calculate_haplotype_distances(frame), [('A', 'B', 1)])
 
     def test_no_complete_loci_rejected(self):
         for frame in (pd.DataFrame({'A': []}), pd.DataFrame({'A': [-1]}),
@@ -158,7 +159,7 @@ class NetworkValidation(unittest.TestCase):
                 self.assertEqual(weighted_edges(graph), reference)
 
     def test_disconnected_forest_and_isolate(self):
-        net = GeneHapNetwork()
+        net = HaplotypeNetwork()
         net.nodes = list('ABCDEF')
         net.edge_data = [('A', 'B', 1), ('B', 'C', 1), ('A', 'C', 1), ('D', 'E', 2)]
         net.create_network('MSN')
@@ -171,7 +172,7 @@ class NetworkValidation(unittest.TestCase):
     def test_invalid_direct_edges_rejected(self):
         for edges in ([('A', 'A', 0)], [('A', 'B', -1)], [('A', 'B', np.nan)],
                       [('A', 'B', 1), ('B', 'A', 2)]):
-            net = GeneHapNetwork()
+            net = HaplotypeNetwork()
             net.edge_data = edges
             with self.assertRaises(ValueError):
                 net.create_network('MSN')
@@ -185,7 +186,7 @@ class NetworkValidation(unittest.TestCase):
                 for suffix in ('csv', 'txt', 'gexf', 'gml'):
                     with self.subTest(method=method, suffix=suffix):
                         path = Path(tmp) / f'{method}.{suffix}'
-                        net.save_network(str(path))
+                        save_network(net.network, str(path))
                         graph = read_network(path)
                         self.assertEqual(list(graph), ['Hap1'])
                         self.assertEqual(graph.number_of_edges(), 0)
@@ -200,7 +201,7 @@ class NetworkValidation(unittest.TestCase):
             net = make_network(SQUARE)
             for suffix in ('csv', 'txt', 'gexf', 'gml'):
                 path = Path(tmp) / f'network.{suffix}'
-                net.save_network(str(path))
+                save_network(net.network, str(path))
                 self.assertEqual(weighted_edges(read_network(path)), weighted_edges(net.network))
                 self.assertEqual(set(read_network(path)), set(net.network))
             frame = pd.read_csv(Path(tmp) / 'network.csv')
@@ -209,13 +210,13 @@ class NetworkValidation(unittest.TestCase):
             self.assertFalse(list(Path(tmp).glob('*.summary.json')))
 
     def test_zero_weight_edges_and_isolate_round_trip(self):
-        net = GeneHapNetwork()
+        net = HaplotypeNetwork()
         net.nodes, net.edge_data = ['A', 'B', 'C'], [('A', 'B', 0)]
         net.create_network('MSN')
         with tempfile.TemporaryDirectory() as tmp:
             for suffix in ('csv', 'txt', 'gexf', 'gml'):
                 path = Path(tmp) / f'network.{suffix}'
-                net.save_network(str(path))
+                save_network(net.network, str(path))
                 self.assertEqual(set(read_network(path)), set('ABC'))
                 self.assertEqual(weighted_edges(read_network(path)), {frozenset('AB'): 0})
 
@@ -226,7 +227,7 @@ class NetworkValidation(unittest.TestCase):
                     net = make_network(frame)
                     for suffix in ('csv', 'txt', 'gexf', 'gml'):
                         path = Path(tmp) / f'network.{suffix}'
-                        net.save_network(str(path))
+                        save_network(net.network, str(path))
                         self.assertEqual(set(read_network(path)), set(frame.columns))
 
     def test_command_callback_and_invalid_table(self):
@@ -272,9 +273,9 @@ class NetworkValidation(unittest.TestCase):
 
     def test_invalid_api_use_rejected(self):
         with self.assertRaises(ValueError):
-            GeneHapNetwork().save_network('unused.csv')
+            save_network(HaplotypeNetwork().network, 'unused.csv')
         with self.assertRaises(ValueError):
-            GeneHapNetwork().create_network()
+            HaplotypeNetwork().create_network()
         net = make_network(SQUARE)
         with self.assertRaises(ValueError):
             net.create_network('unknown')

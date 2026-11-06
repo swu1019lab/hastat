@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 import warnings
+from xml.etree import ElementTree
 
 import matplotlib
 matplotlib.use('Agg')
@@ -13,8 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from hastat.utils.window_plot_data import read_window_track
-from hastat.viz.gene2 import FancyGene
+from hastat.dataio.table import read_window_table
+from hastat.viz.gene import FancyGene
 from test_population import write_vcf
 
 
@@ -52,7 +53,7 @@ class GeneTrackValidation(unittest.TestCase):
 
     def test_literal_chromosome_and_group_labels(self):
         path = self.write('pi.csv', 'chrom,start,end,pi,groups\n01,1,5,0.1,NA\n1,1,5,0.2,01\nNA,1,5,,P\n')
-        data = read_window_track(path, 'pi')
+        data = read_window_table(path, 'pi')
         self.assertEqual(data.chrom.tolist(), ['01', '1', 'NA'])
         self.assertEqual(data.groups.tolist(), ['NA', '01', 'P'])
         self.assertTrue(np.isnan(data.pi.iloc[2]))
@@ -65,17 +66,17 @@ class GeneTrackValidation(unittest.TestCase):
                  'start,end,pi,groups\n1,2,0,\n', 'start,end,pi\n1,2,0\n1,2,0.1\n']
         for text in texts:
             with self.subTest(text=text), self.assertRaises(ValueError):
-                read_window_track(self.write('bad.csv', text), 'pi')
+                read_window_table(self.write('bad.csv', text), 'pi')
 
     def test_overlaps_and_same_window_in_distinct_groups_allowed(self):
         path = self.write('pi.csv', 'chrom,start,end,pi,groups\n1,1,10,.1,P\n1,5,15,.2,P\n1,1,10,.3,Q\n')
-        self.assertEqual(len(read_window_track(path, 'pi')), 3)
+        self.assertEqual(len(read_window_table(path, 'pi')), 3)
 
     def test_invalid_values_rejected_and_undefined_retained(self):
         for metric, value in (('pi', '-.1'), ('pi', 'bad'), ('fst', 'inf'), ('fst', '-Infinity')):
             with self.subTest(metric=metric, value=value), self.assertRaises(ValueError):
-                read_window_track(self.write('bad.csv', f'start,end,{metric}\n1,5,{value}\n'), metric)
-        frame = read_window_track(self.write('fst.csv', 'start,end,fst\n1,5,-.2\n6,10,NA\n11,15,NaN\n'), 'fst')
+                read_window_table(self.write('bad.csv', f'start,end,{metric}\n1,5,{value}\n'), metric)
+        frame = read_window_table(self.write('fst.csv', 'start,end,fst\n1,5,-.2\n6,10,NA\n11,15,NaN\n'), 'fst')
         np.testing.assert_allclose(frame.fst, [-.2, np.nan, np.nan], equal_nan=True)
 
     def test_track_artist_values_and_order_preserve_na_group(self):
@@ -86,7 +87,7 @@ class GeneTrackValidation(unittest.TestCase):
         self.assertEqual(lines[0].get_label(), 'NA')
         np.testing.assert_array_equal(lines[0].get_xdata(), [5.5, 15.5])
         np.testing.assert_allclose(lines[0].get_ydata(), [1, 2])
-        self.assertEqual(obj.ax.child_axes[0].get_xlim(), (.5, 30.5))
+        self.assertEqual(obj.ax.child_axes[0].get_xlim(), (.5, 20.5))
 
     def test_single_window_has_marker_and_nonsingular_axis(self):
         obj = self.obj()
@@ -127,11 +128,30 @@ class GeneTrackValidation(unittest.TestCase):
         self.assertLess(obj.ax.child_axes[0].get_ylim()[0], -.25)
         self.assertEqual(len(obj.ax.child_axes[0].collections), 0)
 
-    def test_region_filter_keeps_only_fully_contained_windows(self):
+    def test_window_track_uses_all_windows_on_target_chromosome(self):
         obj = self.obj()
-        path = self.write('pi.csv', 'chrom,start,end,pi\n1,1,10,.1\n1,1,31,.2\n2,1,10,.3\n')
+        path = self.write('pi.csv', 'chrom,start,end,pi\n1,1,10,.1\n1,1,31,.2\n'
+                          '1,100,150,\n2,1,500,.3\n')
         lines = obj._draw_pi_plot(self.gene, {'pi_file': path}, [0, 0, 1, 1])
-        np.testing.assert_allclose(lines[0].get_ydata(), [100])
+        np.testing.assert_allclose(lines[0].get_xdata(), [5.5, 16, 125])
+        np.testing.assert_allclose(lines[0].get_ydata(), [100, 200, np.nan], equal_nan=True)
+        self.assertEqual(lines[0].axes.get_xlim(), (.5, 150.5))
+        with self.assertLogs('hastat', level='WARNING'):
+            self.assertIsNone(obj._draw_pi_plot(dict(self.gene, chrom='3'), {'pi_file': path}, [0,0,1,1]))
+
+    def test_window_tracks_without_chrom_use_own_extent_and_clip_gene_shading(self):
+        obj = self.obj()
+        gene = dict(self.gene, gene_start=9, gene_end=20)
+        for stat, bounds, shade in [('pi', (1, 11), (8.5, 3)), ('fst', (4, 42), (8.5, 12)),
+                                    ('tajima_d', (40, 99), None)]:
+            with self.subTest(stat=stat):
+                lo, hi = bounds
+                path = self.write(f'{stat}.csv', f'start,end,{stat}\n{lo},{hi},0.1\n')
+                lines = obj._draw_window_track(gene, {stat+'_file': path, 'shade_gene': True}, [0,0,1,1], stat)
+                axis = lines[0].axes
+                self.assertEqual(axis.get_xlim(), (lo-.5, hi+.5))
+                spans = [p for p in axis.patches if p.get_gid() == 'gene-span']
+                self.assertEqual([(p.get_x(), p.get_width()) for p in spans], [shade] if shade else [])
 
     def test_empty_absent_and_invalid_style(self):
         obj = self.obj()
@@ -189,13 +209,13 @@ class GeneTrackValidation(unittest.TestCase):
         other = self.root / 'other'
         other.mkdir()
         output = self.root / 'gene.pdf'
-        result = self.cli('plot', 'gene', '--gff', gff, '--genes', 'G1', '--toml', config, '-o', output, cwd=other)
+        result = self.cli('plot', 'gene', '--gff', gff, '--gene', 'G1', '--toml', config, '-o', output, cwd=other)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(output.stat().st_size, 1000)
-        self.assertEqual(set(read_window_track(self.root / 'windows.pi.csv', 'pi').groups), {'01', 'NA'})
+        self.assertEqual(set(read_window_table(self.root / 'windows.pi.csv', 'pi').groups), {'01', 'NA'})
         output.unlink()
         config.write_text('[default]\npi_file="missing.csv"\n')
-        result = self.cli('plot', 'gene', '--gff', gff, '--genes', 'G1', '--toml', config, '-o', output, cwd=other)
+        result = self.cli('plot', 'gene', '--gff', gff, '--gene', 'G1', '--toml', config, '-o', output, cwd=other)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
 
@@ -211,9 +231,9 @@ class GeneTrackValidation(unittest.TestCase):
         np.testing.assert_allclose(lines[0].get_xdata(), [3, 8, 13])
         self.assertEqual(lines[0].get_label(), 'NA')
         axis = obj.ax.child_axes[0]
-        self.assertEqual(axis.get_ylabel(), "Tajima's D")
+        self.assertEqual(axis.get_ylabel(), "Tajima's $D$")
         np.testing.assert_array_equal(axis.lines[0].get_ydata(), [0, 0])
-        self.assertEqual(axis.get_xlim(), (.5, 30.5))
+        self.assertEqual(axis.get_xlim(), (.5, 15.5))
         self.assertIsNone(obj._draw_tajima_d_plot(self.gene, {}, [0, 0, 1, 1]))
 
     def test_tajima_all_undefined_keeps_nan(self):
@@ -226,11 +246,39 @@ class GeneTrackValidation(unittest.TestCase):
 
     def test_gene_only_config_without_default_table(self):
         gff = gene_gff(self.root / 'genes.gff3')
-        config = self.write('gene.toml', '[G1]\ncolor="C1"\n')
-        obj = FancyGene({'data': {'gff_file': str(gff), 'genes': ['G1'], 'toml_file': str(config)}, 'plot': {}})
+        config = self.write('gene.toml', '[G1]\ngene_color="C1"\n')
+        obj = FancyGene({'data': {'gff_file': str(gff), 'gene': 'G1', 'toml_file': str(config)}, 'plot': {}})
         fig, ax = obj.plot()
         self.assertGreater(len(ax.patches), 0)
         self.assertEqual(len(ax.child_axes), 0)
+
+    def test_cli_selects_one_gene_per_file_and_ignores_unknown_keys(self):
+        gff = gene_gff(self.root / 'two.gff3')
+        with gff.open('a') as stream:
+            stream.write('1\ttest\tgene\t51\t80\t.\t-\t.\tID=G2\n'
+                         '1\ttest\texon\t54\t76\t.\t-\t.\tID=E2;Parent=G2\n')
+        config = self.write('two.toml', '[default]\ngene_color="#154276"\n'
+            '[G1]\nwidth=0.1\n[G2]\ngene_color="#ad534d"\ngene_feature="exon"\n')
+        for gene, other, color in [('G1','G2','#154276'), ('G2','G1','#ad534d')]:
+            output = self.root / f'{gene}.svg'
+            result = self.cli('plot', 'gene', '--gff', gff, '--gene', gene, '--toml', config, '-o', output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            svg = ElementTree.parse(output)
+            labels = [t.text for t in svg.iter('{http://www.w3.org/2000/svg}text')]
+            self.assertIn(gene, labels)
+            self.assertNotIn(other, labels)
+            self.assertIn(f'fill: {color}', output.read_text())
+            if gene == 'G1':
+                self.assertIn("Unknown gene TOML parameter 'width' in [G1]", result.stderr)
+
+    def test_cli_rejects_missing_plural_multiple_or_repeated_gene(self):
+        output = self.root / 'invalid.svg'
+        for selection in [[], ['--genes','G1'], ['--gene','G1','G2'], ['--gene','G1','--gene','G2']]:
+            with self.subTest(selection=selection):
+                result = self.cli('plot', 'gene', '--gff', 'unused.gff3', '--toml', 'unused.toml',
+                                  *selection, '-o', output)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertFalse(output.exists())
 
 
 if __name__ == '__main__':

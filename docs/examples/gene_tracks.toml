@@ -1,27 +1,89 @@
+# Complete GeneA example. Run the gene command in commands.sh from this directory.
 [default]
-bbox=[0.15,0.05,0.8,1.06]
-xy=[0.0,0.87830189]
-height=0.02271698
-hap_file="gene"
-hap_color_file="hap_colors.csv"
-hap_cluster_show=true
-hap_y=0.58622642
-hap_height=0.20283019
-hap_label_size=9
-hap_freq_show=true
-hap_freq_height=0.02028302
-hap_freq_y=0.50509434
-ann_file="annotations.csv"
-ann_y=0.99188679
-pi_file="gene.pi.csv"
-pi_y=0.34283019
-pi_height=0.09735849
-pi_style="line"
-fst_file="gene.fst.csv"
-fst_y=0.18867925
-fst_height=0.09735849
-fst_style="line"
-tajima_d_file="gene.tajima_d.csv"
-tajima_d_y=0.0
-tajima_d_height=0.09735849
-tajima_d_style="line"
+# Panel layout
+bbox = [0.15, 0.05, 0.80, 1.37904427609428] # all artist objects will be plotted in the boundary box (relative to matplotlib axes)
+layout = "fixed" # use this gene's bbox-relative coordinates
+
+# Gene structure
+gene_y = 0.57416575647776 # gene center relative to bbox height
+gene_height = 0.01767891025881 # the height to plot gene, should be within [0, 1] (relative to bbox)
+gene_color = "#24495D" # the color to plot feature
+gene_feature = "CDS" # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
+gene_label_size = 10 # the fontsize of gene label
+gene_label_show = true # Whether to display the gene label
+
+# Variant annotations
+ann_file = "" # the data of variant annotation, csv file, e.g., hap_ann.csv
+ann_y = 0.60380197221654 # the y value of annotation text (relative to bbox)
+ann_band_y = 0.50730785960071 # bottom of the variant annotation strip
+ann_legend_y = 0.61674217881792 # bottom of the annotation legend
+ann_text_size = 8 # the fontsize of annotation text
+
+# Haplotype matrix
+hap_file = "" # prefix, e.g., gene reads gene.table.csv and optional gene.group.csv
+hap_y = 0.35125775756230 # the y value of haplotypes (relative to bbox)
+hap_height = 0.15372965442446 # the height of whole haplotypes plot (relative to bbox)
+hap_cols = [] # only show the haplotypes data of interested
+hap_label_show = true # Whether to display the haplotype labels
+hap_label_size = 9 # the fontsize of haplotype labels
+hap_count_show = true # show sample counts from the group CSV
+
+# Haplotype group colors
+hap_color_file = "" # optional headerless two-column haplotype-to-category CSV
+hap_group_bar_x = -0.12 # x offset for group bar relative to haplotype matrix
+hap_group_bar_width = 0.02 # width of group bar
+
+# Allele frequencies
+af_show = true # whether to show variant frequency
+af_height = 0.01537296544245 # height of frequency track
+af_y = 0.29817751839310 # the y value of frequency track (relative to bbox)
+af_style = "bar" # plot type of frequency track: "bar" or "pie"
+pop_file = "" # optional sample groups for allele frequencies
+
+# Linkage disequilibrium
+vcf_file = "" # indexed VCF for whole-population LD and allele frequencies
+ld_show = false # enabled below for GeneA, which has a VCF
+ld_y = 0.29005595174426 # top of the downward LD triangle (relative to bbox)
+ld_cmap = "Blues"
+ld_colorbar = true
+
+# Haplotype clustering
+hap_cluster_show = true # whether to show hierarchical clustering dendrogram
+hap_cluster_linkage = "average" # Hamming linkage: 'average', 'complete', 'single', 'weighted'
+hap_cluster_width = 0.1 # width of the dendrogram relative to the plot width
+
+# Haplotype and variant filters
+hap_het_rate = [0, 1] # the range of heterozygosity rate for haplotypes (samples) to keep
+hap_mis_rate = [0, 1] # the range of missing rate for haplotypes (samples) to keep
+var_het_rate = [0, 1] # the range of heterozygosity rate for variants (sites) to keep
+var_mis_rate = [0, 1] # the range of missing rate for variants (sites) to keep
+
+# Pi
+pi_file = "" # the pi data of target region, csv file, e.g., gene.pi.csv with chrom,start,end,n_bases,counts,pi,groups
+pi_y = 0.89643552242971 # the y value of pi plot (relative to bbox)
+pi_height = 0.07455888239586 # the height of pi plot (relative to bbox)
+pi_style = "line" # plot style: "line" or "fill" (fill_between)
+shade_gene = true # mark the gene span on all three window tracks
+
+# Fst
+fst_file = "" # the fst data of target region, csv file, e.g., gene.fst.csv with chrom,start,end,counts,fst,groups
+fst_y = 0.77546768775477 # the y value of fst plot (relative to bbox)
+fst_height = 0.07455888239586 # the height of fst plot (relative to bbox)
+fst_style = "line" # plot style: "line" or "fill" (fill_between)
+
+# Tajima's D
+tajima_d_file = "" # window estimates for Tajima's D
+tajima_d_y = 0.65449985307982 # relative to bbox
+tajima_d_height = 0.07455888239586
+tajima_d_style = "line"
+
+[GeneA]
+ann_file = "annotations.csv"
+hap_file = "gene"
+hap_color_file = "hap_colors.csv"
+pop_file = "populations.csv"
+vcf_file = "gene.vcf.gz"
+ld_show = true
+pi_file = "gene.pi.csv"
+fst_file = "gene.fst.csv"
+tajima_d_file = "gene.tajima_d.csv"

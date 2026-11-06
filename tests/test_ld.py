@@ -1,4 +1,5 @@
 """LD boundary/VCF/render checks and independent centered-dot-product oracle; PBS only."""
+from hastat.utils import population
 from itertools import product
 from pathlib import Path
 import tempfile
@@ -13,9 +14,9 @@ import numpy as np
 import pandas as pd
 import pysam
 
-from hastat.utils.gene import GeneVariant
-from hastat.utils.haplotype import normalize_loci
-from hastat.utils.ld import ld_r_squared
+from hastat.utils.variant import VariantData
+from hastat.utils.variant import normalize_loci
+from hastat.utils.population import ld_r_squared
 from hastat.viz import ldheatmap
 from test_population import write_vcf
 
@@ -58,7 +59,7 @@ class LDValidation(unittest.TestCase):
                          samples=samples)
         handle = pysam.VariantFile(path)
         self.addCleanup(handle.close)
-        return GeneVariant(handle)
+        return VariantData(handle)
 
     def close(self, actual, expected):
         np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=2e-6, equal_nan=True)
@@ -126,11 +127,11 @@ class LDValidation(unittest.TestCase):
 
     def test_real_library_used_and_nonfinite_not_clipped_to_one(self):
         original = allel.rogers_huff_r
-        with patch('hastat.utils.ld.allel.rogers_huff_r', wraps=original) as call:
+        with patch('hastat.utils.population.allel.rogers_huff_r', wraps=original) as call:
             ld_r_squared(DOSAGE)
             call.assert_called_once()
             self.assertEqual(call.call_args.args[0].dtype, np.int8)
-        with patch('hastat.utils.ld.allel.rogers_huff_r', return_value=np.array([1.0000001, np.inf, np.nan], dtype=np.float32)):
+        with patch('hastat.utils.population.allel.rogers_huff_r', return_value=np.array([1.0000001, np.inf, np.nan], dtype=np.float32)):
             result = ld_r_squared(DOSAGE[:3])
             self.assertEqual(result[0, 1], 1)
             self.assertTrue(np.isnan(result[0, 2]))
@@ -138,35 +139,35 @@ class LDValidation(unittest.TestCase):
 
     def test_single_region_boundaries_empty_and_partial_calls(self):
         gv = self.variant()
-        self.close(gv.get_ld_data('chr1', 10, 40), reference(DOSAGE))
-        self.close(gv.get_ld_data('chr1', 10, 10), [[1]])
-        self.assertEqual(gv.get_ld_data('chr1', 41, 100).shape, (0, 0))
+        self.close(population.calculate_ld(gv, 'chr1', 10, 40), reference(DOSAGE))
+        self.close(population.calculate_ld(gv, 'chr1', 10, 10), [[1]])
+        self.assertEqual(population.calculate_ld(gv, 'chr1', 41, 100).shape, (0, 0))
         rows = [(10, 'A', 'G', ['0/.', '0/0', '0/1', '1/1']),
                 (20, 'A', 'G', ['./1', '0/0', '0/1', '1/1'])]
-        self.close(self.variant(rows).get_ld_data('chr1', 1, 30), [[1, 1], [1, 1]])
+        self.close(population.calculate_ld(self.variant(rows), 'chr1', 1, 30), [[1, 1], [1, 1]])
 
     def test_overlapping_reordered_multi_regions_count_once(self):
         gv = self.variant()
         loci = [('chr1', 20, 40), ('chr1', 1, 30), ('chr1', 10, 10)]
-        self.close(gv.get_multi_loci_ld_data(loci), gv.get_ld_data('chr1', 1, 40))
-        self.close(gv.get_multi_loci_ld_data(reversed(loci)), reference(DOSAGE))
-        self.assertEqual(gv.get_multi_loci_ld_data([('chr1', 60, 80), ('chr1', 90, 100)]).shape, (0, 0))
-        self.close(gv.get_multi_loci_ld_data([('chr1', 10, 10), ('chr1', 90, 100)]), [[1]])
+        self.close(population.calculate_multi_loci_ld(gv, loci), population.calculate_ld(gv, 'chr1', 1, 40))
+        self.close(population.calculate_multi_loci_ld(gv, reversed(loci)), reference(DOSAGE))
+        self.assertEqual(population.calculate_multi_loci_ld(gv, [('chr1', 60, 80), ('chr1', 90, 100)]).shape, (0, 0))
+        self.close(population.calculate_multi_loci_ld(gv, [('chr1', 10, 10), ('chr1', 90, 100)]), [[1]])
 
     def test_empty_or_invalid_region_requests_rejected(self):
         gv = self.variant()
         for loci in ([], [('chr1', 0, 10)], [('chr1', 20, 10)], [('chr1', 1.5, 10)]):
             with self.assertRaises(ValueError):
-                gv.get_multi_loci_ld_data(loci)
+                population.calculate_multi_loci_ld(gv, loci)
 
     def test_duplicate_records_rejected_but_indels_retained(self):
         row = rows_from_dosage(DOSAGE[:1])[0]
         gv = self.variant([row, row])
         with self.assertRaisesRegex(ValueError, 'Duplicate'):
-            gv.get_ld_data('chr1', 1, 50)
+            population.calculate_ld(gv, 'chr1', 1, 50)
         with self.assertRaisesRegex(ValueError, 'Duplicate'):
-            gv.get_multi_loci_ld_data([('chr1', 1, 50)])
-        self.close(self.variant([(10, 'AT', 'A', ['0/0', '0/1', '1/1', './.'])]).get_ld_data('chr1', 10, 10), [[1]])
+            population.calculate_multi_loci_ld(gv, [('chr1', 1, 50)])
+        self.close(population.calculate_ld(self.variant([(10, 'AT', 'A', ['0/0', '0/1', '1/1', './.'])]), 'chr1', 10, 10), [[1]])
 
     def test_cross_chromosome_matrix_order(self):
         path = self.root / 'multi.vcf'
@@ -178,11 +179,11 @@ class LDValidation(unittest.TestCase):
         pysam.tabix_compress(str(path), str(path)+'.gz', force=True)
         pysam.tabix_index(str(path)+'.gz', preset='vcf', force=True)
         with pysam.VariantFile(str(path)+'.gz') as handle:
-            gv = GeneVariant(handle)
+            gv = VariantData(handle)
             loci = [('chr2', 1, 40), ('chr1', 1, 40)]
-            frame = gv.get_multi_loci_geno_data(normalize_loci(loci))
+            frame = gv.extract_multi_loci_genotypes(normalize_loci(loci))
             self.assertEqual(list(frame.index.get_level_values('chrom')), ['chr1', 'chr1', 'chr2'])
-            self.close(gv.get_multi_loci_ld_data(loci), reference(frame.to_numpy()))
+            self.close(population.calculate_multi_loci_ld(gv, loci), reference(frame.to_numpy()))
 
     def test_heatmap_masks_nan_and_skips_numeric_annotation(self):
         matrix = ld_r_squared([[0, 1, 2], [1, 1, 1], [2, 1, 0]])

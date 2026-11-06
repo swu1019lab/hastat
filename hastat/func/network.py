@@ -4,10 +4,11 @@
 # @Email   : lxd1997xy@163.com
 # @File    : network.py
 
+from hastat.dataio.network import save_network
 import time
 import pandas as pd
 from hastat.log.logger import logger
-from hastat.utils.gene import GeneHapNetwork
+from hastat.utils.network import HaplotypeNetwork
 
 
 def run(args):
@@ -37,10 +38,10 @@ def run(args):
     logger.info(f"Loaded haplotype table with {hap_data.shape[0]} loci and {hap_data.shape[1]} haplotypes")
 
     # Initialize network analysis
-    network = GeneHapNetwork()
+    network = HaplotypeNetwork()
     
     # Add edge data (calculate Hamming distances)
-    network.add_edge(hap_data)
+    network.set_haplotypes(hap_data)
     logger.info(f"Calculated Hamming distances for {hap_data.shape[1]} haplotypes")
 
     # Create network using specified method
@@ -49,7 +50,7 @@ def run(args):
     
     # Save network data if output file specified
     if args.out:
-        network.save_network(args.out)
+        save_network(network.network, args.out)
 
     end_time = time.time()
     logger.info("network function runs {:.2f} seconds".format(end_time - start_time))

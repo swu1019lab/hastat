@@ -2,7 +2,7 @@
 # @Time    : 2024/10/8 21:43
 # @Author  : LXD
 # @Email   : lxd1997xy@163.com
-# @File    : biotool.py
+# @File    : external.py
 
 import os
 import subprocess

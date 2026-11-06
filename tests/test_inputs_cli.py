@@ -1,4 +1,6 @@
 """Input identifiers and real CLI integration; execute inside a PBS allocation."""
+from functools import partial
+from hastat.utils import population
 import importlib.metadata
 import os
 from pathlib import Path
@@ -14,9 +16,9 @@ import pysam
 
 from hastat import __version__
 from hastat.func import stat, view, plot
-from hastat.utils.gene import GeneVariant
-from hastat.utils.sample_data import read_assignments, read_sample_csv
-from hastat.utils.stat import HapAnovaTest, PAIR_COLUMNS, STAT_VERSION
+from hastat.utils.variant import VariantData
+from hastat.dataio.table import read_assignments, read_sample_csv
+from hastat.utils.association import HaplotypeAssociation, PAIR_COLUMNS, ASSOCIATION_VERSION
 from hastat.viz.network import FancyNetwork
 from test_population import write_vcf
 
@@ -55,7 +57,7 @@ class InputCLIValidation(unittest.TestCase):
         result = self.cli('--version')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip().split()[-1], __version__)
-        self.assertEqual(STAT_VERSION, __version__)
+        self.assertEqual(ASSOCIATION_VERSION, __version__)
         if os.environ.get('HASTAT_CLI'):
             self.assertEqual(importlib.metadata.version('hastat'), __version__)
 
@@ -93,7 +95,7 @@ class InputCLIValidation(unittest.TestCase):
         frame = pd.read_csv(output)
         self.assertEqual(frame.columns.tolist(), PAIR_COLUMNS)
         self.assertEqual(frame[['count1', 'count2']].iloc[0].tolist(), [3, 3])
-        reference = HapAnovaTest(pd.DataFrame({'samples': ['a', 'b', 'c', 'd', 'e', 'f'],
+        reference = HaplotypeAssociation(pd.DataFrame({'samples': ['a', 'b', 'c', 'd', 'e', 'f'],
                                               'trait': [1, 2, 4, 5, 7, 8]}),
             pd.DataFrame({'samples': ['a', 'b', 'c', 'd', 'e', 'f'], 'haplotypes': ['A']*3 + ['B']*3}),
             min_hap_size=2, method='WelchBonferroni').comparisons
@@ -118,10 +120,10 @@ class InputCLIValidation(unittest.TestCase):
     def test_pi_and_d_numeric_ids_and_na_population_match_direct_api(self):
         path, groups = self.population_files()
         with pysam.VariantFile(path) as handle:
-            gv = GeneVariant(handle)
+            gv = VariantData(handle)
             for kind, method, columns in (
-                    ('pi', gv.get_pi_data, ['chrom', 'start', 'end', 'n_bases', 'counts', 'pi', 'groups']),
-                    ('tajima_d', gv.get_tajima_d_data, ['chrom', 'start', 'end', 'counts', 'tajima_d', 'groups'])):
+                    ('pi', partial(population.calculate_pi, gv), ['chrom', 'start', 'end', 'n_bases', 'counts', 'pi', 'groups']),
+                    ('tajima_d', partial(population.calculate_tajima_d, gv), ['chrom', 'start', 'end', 'counts', 'tajima_d', 'groups'])):
                 result = self.cli('view', '-v', path, '-r', 'chr1:1-3', '-g', groups, '-t', kind,
                                   '--size', 3, '--step', 3, '-o', self.root / kind)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -192,6 +194,16 @@ class InputCLIValidation(unittest.TestCase):
         self.assertEqual(FancyNetwork(config).node_sizes, {'Hap1': 2, 'Hap2': 1})
         del config['data']['sample_hap']
         self.assertEqual(FancyNetwork(config).node_sizes, {'Hap1': 1, 'Hap2': 1})
+
+    def test_network_filters_only_missing_selected_metadata(self):
+        config = self.network_config()
+        Path(config['data']['sample_group']).write_text('samples,pop,other\n001,A,\n1,B,\nNA,,C\n')
+        with self.assertLogs('hastat', level='WARNING'):
+            net = FancyNetwork(config)
+        self.assertEqual(net.node_sizes, {'Hap1':1,'Hap2':1})
+        config['data']['group_index'] = 2
+        with self.assertLogs('hastat', level='WARNING'):
+            self.assertEqual(FancyNetwork(config).node_sizes, {'Hap1':1,'Hap2':0})
 
     def test_network_real_cli_dispatch_and_invalid_input_exit(self):
         config = self.network_config()['data']

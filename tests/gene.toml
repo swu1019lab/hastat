@@ -1,10 +1,12 @@
 [default]
+# Panel layout
 bbox = [0.2, 0.2, 0.8, 0.6] # all artist objects will be plotted in the boundary box (relative to matplotlib axes)
-xy = [0, 0.4] # selected-region left and gene center y (relative to bbox)
-width = 1 # selected physical-region width, shared by gene coordinates and pi/Fst
-height = 0.05 # the height to plot gene, should be within [0, 1] (relative to bbox)
-color = 'C0' # the color to plot feature
-feature = 'exon' # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
+
+# Gene structure
+gene_y = 0.4 # gene center relative to bbox height
+gene_height = 0.05 # the height to plot gene, should be within [0, 1] (relative to bbox)
+gene_color = 'C0' # the color to plot feature
+gene_feature = 'exon' # the feature type that the target gene contain, e.g., CDS, exon or five_prime_UTR
 gene_label_size = 10 # the fontsize of gene label
 gene_label_show = true # Whether to display the gene label
 
@@ -23,10 +25,10 @@ hap_color_file = "" # optional headerless two-column haplotype-to-category CSV
 hap_group_bar_x = -0.12 # x offset for group bar relative to haplotype matrix
 hap_group_bar_width = 0.02 # width of group bar
 
-hap_freq_show = true # whether to show variant frequency
-hap_freq_height = 0.05 # height of frequency track
-hap_freq_y = 0 # the y value of frequency track (relative to bbox)
-hap_freq_plot_type = "bar" # plot type of frequency track: "bar" or "pie"
+af_show = true # whether to show variant frequency
+af_height = 0.05 # height of frequency track
+af_y = 0 # the y value of frequency track (relative to bbox)
+af_style = "bar" # plot type of frequency track: "bar" or "pie"
 
 hap_cluster_show = true # whether to show hierarchical clustering dendrogram
 hap_cluster_linkage = 'average' # Hamming linkage: 'average', 'complete', 'single', 'weighted'

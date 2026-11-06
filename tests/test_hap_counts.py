@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from hastat.viz.gene2 import FancyGene
+from hastat.viz.gene import FancyGene
 from test_gene_tracks import gene_gff
 from test_population import write_vcf
 
@@ -33,10 +33,10 @@ def example_inputs(root, counts=(25, 12, 3)):
 def example_config(root, extra='', counts=True):
     if not counts:
         (root / 'gene.group.csv').unlink(missing_ok=True)
-    (root / 'gene.toml').write_text('[default]\nbbox=[0.1,0.1,0.8,0.8]\nxy=[0.0,0.85]\n'
-        'height=0.1\nhap_y=0.0\nhap_height=0.4\nhap_freq_show=false\n'
+    (root / 'gene.toml').write_text('[default]\nbbox=[0.1,0.1,0.8,0.8]\ngene_y=0.85\n'
+        'gene_height=0.1\nhap_y=0.0\nhap_height=0.4\naf_show=false\n'
         'hap_file="gene"\n' + extra)
-    return {'data': {'gff_file': str(root / 'gene.gff3'), 'genes': ['G1'], 'toml_file': str(root / 'gene.toml')},
+    return {'data': {'gff_file': str(root / 'gene.gff3'), 'gene': 'G1', 'toml_file': str(root / 'gene.toml')},
             'plot': {'width': 8, 'height': 5}}
 
 
@@ -134,6 +134,7 @@ class HaplotypeCountValidation(unittest.TestCase):
 
     def test_cluster_without_groups_and_repeated_plot(self):
         obj = self.draw('hap_cluster_show=true\nhap_cluster_linkage="average"\n')
+        self.assertFalse(any(a.get_gid() == 'hap-color-legend' for a in obj.ax.artists))
         self.assertEqual(set(labels_for(obj)), {'Hap1 (n=5)','Hap2 (n=3)','Hap3 (n=1)'})
         texts, bars, tree = obj._count_label_layout[0]
         obj.fig.canvas.draw()
@@ -143,6 +144,21 @@ class HaplotypeCountValidation(unittest.TestCase):
         obj.plot()
         self.assertEqual(len(obj._count_label_layout), 1)
         self.assertEqual(len(labels_for(obj)), 3)
+
+    def test_legend_uses_displayed_row_colors_in_the_lower_left(self):
+        (self.root / 'hap.categories.csv').write_text('Hap1,zeta\nHap2,alpha\nHap3,hidden\n')
+        obj = self.draw('hap_color_file="hap.categories.csv"\nhap_cols=["Hap1","Hap2"]\nhap_cluster_show=true\n')
+        legend, = [a for a in obj.ax.artists if a.get_gid() == 'hap-color-legend']
+        self.assertEqual(legend.get_title().get_text(), '')
+        self.assertEqual([t.get_text() for t in legend.get_texts()], ['alpha','zeta'])
+        labels, bars, tree = obj._count_label_layout[0]
+        colors = {t.get_text().split()[0]:b.get_facecolor() for t,b in zip(labels,bars)}
+        np.testing.assert_allclose([p.get_facecolor() for p in legend.legend_handles],
+                                   [colors['Hap2'], colors['Hap1']])
+        obj.fig.canvas.draw()
+        bounds = legend.get_window_extent()
+        self.assertLess(bounds.y1, min(line.get_window_extent().y0 for line in tree))
+        self.assertLess(bounds.x1, obj.ax.transData.transform((.1,0))[0])
 
     def test_real_view_table_group_to_gene_plot_cli(self):
         samples = ('001','1','NA','s4','s5','s6')
@@ -161,7 +177,7 @@ class HaplotypeCountValidation(unittest.TestCase):
         other = self.root/'other'
         other.mkdir()
         output = self.root/'hap.svg'
-        result = self.cli('plot','gene','--gff',self.root/'gene.gff3','--genes','G1',
+        result = self.cli('plot','gene','--gff',self.root/'gene.gff3','--gene','G1',
                           '--toml',self.root/'gene.toml','-o',output,cwd=other)
         self.assertEqual(result.returncode,0,result.stderr)
         text = output.read_text()
@@ -171,7 +187,7 @@ class HaplotypeCountValidation(unittest.TestCase):
         output.unlink()
         path = self.root/'gene.group.csv'
         path.write_text(path.read_text()+'001,Hap1\n')
-        result = self.cli('plot','gene','--gff',self.root/'gene.gff3','--genes','G1',
+        result = self.cli('plot','gene','--gff',self.root/'gene.gff3','--gene','G1',
                           '--toml',self.root/'gene.toml','-o',output,cwd=other)
         self.assertNotEqual(result.returncode,0)
         self.assertFalse(output.exists())

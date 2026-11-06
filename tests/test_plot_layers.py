@@ -48,4 +48,3 @@ class PlotLayerValidation(unittest.TestCase):
                 np.testing.assert_array_equal(images[0][y-10:y+11, x-10:x+11],
                                               images[1][y-10:y+11, x-10:x+11])
                 self.assertTrue(np.any(images[0] != images[1]))
-

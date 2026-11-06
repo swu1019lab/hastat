@@ -16,8 +16,8 @@ from scipy import stats
 from hastat.viz.box import HapBox
 from hastat.viz.bar import HapBar
 from hastat.viz.pie import HapPie
-from hastat.utils.plot_data import read_sample_csv, numeric_trait
-from hastat.utils.stat import HapAnovaTest
+from hastat.dataio.table import read_sample_csv, parse_numeric_values
+from hastat.utils.association import HaplotypeAssociation
 
 ROOT = Path(__file__).resolve().parents[1]
 ARRAYS = ([1, 2, 3, 4, 5], [3, 4, 5, 6, 7], [1, 4, 7, 10, 13])
@@ -136,10 +136,10 @@ class PlotValidation(unittest.TestCase):
                 obj.get_plot_data('value')
 
     def test_numeric_missing_infinite_and_bad_text(self):
-        values = numeric_trait(pd.Series(['0', '', 'NA', 'NaN', 'inf', '-inf', '-2']))
+        values = parse_numeric_values(pd.Series(['0', '', 'NA', 'NaN', 'inf', '-inf', '-2']))
         self.assertEqual(values.dropna().tolist(), [0, -2])
         with self.assertRaises(ValueError):
-            numeric_trait(pd.Series(['oops']))
+            parse_numeric_values(pd.Series(['oops']))
         obj = box_for(([np.nan, np.inf], [np.nan, np.inf]))
         with self.assertRaisesRegex(ValueError, 'finite'):
             obj.get_plot_data('trait')
@@ -167,7 +167,7 @@ class PlotValidation(unittest.TestCase):
         hap, phe = frames()
         for method in ('TukeyHSD', 'WelchBonferroni'):
             result = box_for(method=method).comparison_pvalues('trait')
-            reference = HapAnovaTest(phe, hap, min_hap_size=2, method=method).comparisons
+            reference = HaplotypeAssociation(phe, hap, min_hap_size=2, method=method).comparisons
             for row in reference.to_dict('records'):
                 self.assertEqual(result[row['group1'], row['group2']], row['p-adj'])
         self.assertEqual(box_for(method='welch').comparison_pvalues('trait'),

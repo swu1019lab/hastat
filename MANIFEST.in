@@ -7,6 +7,7 @@ include hastat.egg-info/requires.txt hastat.egg-info/top_level.txt
 include docs/EXAMPLES.md
 include docs/gallery.html
 recursive-include docs/examples *.csv *.gff3 *.toml *.vcf commands.sh
+include docs/examples/gene.vcf.gz docs/examples/gene.vcf.gz.tbi
 recursive-include docs/images *.png *.pdf *.svg
 recursive-include hastat *.py
 recursive-include hastat/conf *.toml *.mplstyle

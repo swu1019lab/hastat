@@ -12,7 +12,7 @@ from matplotlib import axes
 import matplotlib.pyplot as plt
 from hastat.viz._export import save_figure
 from matplotlib.colors import LinearSegmentedColormap
-from hastat.utils.plot_data import read_sample_csv, sample_frame, select_haplotypes, merge_samples, grouped_counts
+from hastat.dataio.table import read_sample_csv, normalize_sample_table, select_haplotypes, merge_samples, grouped_counts
 
 
 class HapPie(object):
@@ -42,7 +42,7 @@ class HapPie(object):
         :param labels: a list contained haplotype group names to be analyzed
         :return:
         """
-        self.sample_hap = select_haplotypes(sample_frame(df, 'haplotypes'), haplotypes)
+        self.sample_hap = select_haplotypes(normalize_sample_table(df, 'haplotypes'), haplotypes)
 
     def add_group(self, df: pd.DataFrame):
         """
@@ -54,7 +54,7 @@ class HapPie(object):
             3. other columns are group names
         :return:
         """
-        self.sample_group = sample_frame(df, 'groups')
+        self.sample_group = normalize_sample_table(df, 'groups')
 
     def merge_data(self):
         if self.sample_hap is None or self.sample_group is None:
@@ -86,8 +86,9 @@ class HapPie(object):
             ax.pie(data[col], labels=data.index, labeldistance=None,
                    colors=pie_colors, center=(i * 1, 0.5), radius=0.4,
                    wedgeprops={"linewidth": 1, "edgecolor": "white"})
-            ax.text(i * 1, 0.5 + 0.5, col, ha='center', va='bottom', fontsize=8, rotation=0)
-            ax.text(i * 1, 0.5 - 0.5, f"{data[col].sum()}", ha='center', va='top', fontsize=8)
+            ax.text(i * 1, 0.5 + 0.48, col, ha='center', va='bottom', fontsize=12, rotation=0)
+            ax.text(i * 1, 0.5 - 0.48, f"{data[col].sum()}", ha='center', va='top', fontsize=11)
             ax.axis('equal')
-        ax.legend(data.index, bbox_to_anchor=(1, 0, 0.5, 1), loc='center left', frameon=False)
+        ax.legend(data.index, bbox_to_anchor=(1, 0, 0.5, 1), loc='center left', frameon=False,
+                  fontsize=11, labelspacing=.7)
         save_figure(ax.figure, self.config['plot']['save_fig'], dpi=300, bbox_inches='tight')

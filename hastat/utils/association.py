@@ -1,4 +1,4 @@
-"""One-way mean comparisons; see STAT_METHODS.md for formulas and validation."""
+"""Haplotype-trait association using ANOVA and adjusted pairwise comparisons."""
 from itertools import combinations
 import numpy as np
 import pandas as pd
@@ -6,8 +6,8 @@ from scipy import stats
 from statsmodels.stats.oneway import anova_oneway
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
-from hastat import __version__ as STAT_VERSION
-from hastat.utils.sample_data import validate_sample_ids, numeric_trait
+from hastat import __version__ as ASSOCIATION_VERSION
+from hastat.dataio.table import validate_sample_ids, parse_numeric_values
 METHODS = ('TukeyHSD', 'WelchBonferroni')
 PAIR_COLUMNS = ['pheno', 'annotate', 'method', 'group1', 'group2', 'count1', 'count2',
                 'mean1', 'mean2', 'std1', 'std2', 'meandiff', 'lower', 'upper',
@@ -18,7 +18,7 @@ def _validated_frame(frame, name):
     return validate_sample_ids(frame)
 
 
-class HapAnovaTest:
+class HaplotypeAssociation:
     def __init__(self, pheno, groups, min_hap_size=10, annotate='gene', method='TukeyHSD', alpha=0.05):
         if method not in METHODS:
             raise ValueError(f'Unknown comparison method {method!r}; choose TukeyHSD or WelchBonferroni')
@@ -37,7 +37,7 @@ class HapAnovaTest:
             raise ValueError('Empty haplotype assignment')
         traits = [c for c in pheno if c != 'samples']
         for trait in traits:
-            pheno[trait] = numeric_trait(pheno[trait])
+            pheno[trait] = parse_numeric_values(pheno[trait])
         merged = pheno.merge(groups, how='inner', on='samples', validate='one_to_one')
         self.group_labels = sorted(groups['haplotypes'].unique())
         self.phap_data = merged.set_index(['samples', 'haplotypes'])[traits]
@@ -128,6 +128,6 @@ class HapAnovaTest:
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=PAIR_COLUMNS)
 
     def result(self):
-        return dict(version=STAT_VERSION, method=self.method, alpha=self.alpha,
+        return dict(version=ASSOCIATION_VERSION, method=self.method, alpha=self.alpha,
                     omnibus=self._stat_anova['omnibus'], groups=self._stat_anova['groups'],
                     comparisons=self.comparisons.to_dict(orient='records'))

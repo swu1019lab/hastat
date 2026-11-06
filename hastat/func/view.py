@@ -8,7 +8,7 @@ import time
 import pandas as pd
 from itertools import combinations
 from hastat.log.logger import logger
-from hastat.utils.sample_data import read_assignments
+from hastat.dataio.table import read_assignments
 
 # Set the display option to show all rows
 pd.set_option('display.max_rows', None)
@@ -32,7 +32,7 @@ def run(args):
         raise ValueError("--het, --maf and --max_missing are not supported for compare; "
                          "these options previously had no effect on this output")
 
-    from hastat.utils import gene
+    from hastat.utils import variant, haplotype, population
     from hastat.dataio import gff, vcf
 
     start_time = time.time()
@@ -50,11 +50,11 @@ def run(args):
         # Use default population names if not provided
         pop_names = args.pop_names if args.pop_names else [f"Pop{i+1}" for i in range(len(args.vcf))]
         
-        # Create GeneVariant objects for each VCF
-        gv_list = [gene.GeneVariant(vcf.read(vcf_file)) for vcf_file in args.vcf]
+        # Create VariantData objects for each VCF
+        gv_list = [variant.VariantData(vcf.read(vcf_file)) for vcf_file in args.vcf]
     else:
         # For single VCF file analysis, use the first VCF file
-        gv = gene.GeneVariant(vcf.read(args.vcf[0]))
+        gv = variant.VariantData(vcf.read(args.vcf[0]))
 
     # Initialize tasks list
     tasks = []
@@ -66,7 +66,7 @@ def run(args):
             start, end = map(int, interval.split('-'))
         except ValueError as exc:
             raise ValueError("Region must be chrom:start-end (1-based inclusive)") from exc
-        gene.GeneVariant._validate_region(start, end)
+        variant.VariantData._validate_region(start, end)
         if args.upstream < 0 or args.downstream < 0:
             raise ValueError("Upstream and downstream lengths must be non-negative")
         start = max(1, start - args.upstream)
@@ -74,7 +74,7 @@ def run(args):
         tasks.append({'name': args.region, 'loci': [(chrom, start, end)], 'multi': False})
     elif args.gene_id:
         logger.info(f"Analyzing gene: {args.gene_id}")
-        gf = gene.GeneFeature(gff.read(args.gff))
+        gf = gff.GeneAnnotation(gff.read(args.gff))
         chrom, start, end = gf.get_locus(args.gene_id, args.upstream, args.downstream)
         tasks.append({'name': args.gene_id, 'loci': [(chrom, start, end)], 'multi': False})
     elif args.homo:
@@ -82,7 +82,7 @@ def run(args):
             logger.error("The GFF file should be provided when using --homo!!!")
             raise ValueError("The GFF file should be provided when using --homo!!!")
         logger.info(f"Analyzing homologous genes: {args.homo}")
-        gf = gene.GeneFeature(gff.read(args.gff))
+        gf = gff.GeneAnnotation(gff.read(args.gff))
         gene_ids = [gene_id.strip() for gene_id in args.homo.split(',')]
         merged_loci = gf.get_merged_locus(gene_ids, args.upstream, args.downstream)
         tasks.append({'name': args.homo, 'loci': merged_loci, 'multi': True})
@@ -91,7 +91,7 @@ def run(args):
             logger.error("The GFF file should be provided when using --list!!!")
             raise ValueError("The GFF file should be provided when using --list!!!")
         logger.info(f"Analyzing genes from list: {args.list}")
-        gf = gene.GeneFeature(gff.read(args.gff))
+        gf = gff.GeneAnnotation(gff.read(args.gff))
         with open(args.list, 'r') as f:
             gene_ids = [line.strip() for line in f if line.strip()]
         
@@ -126,8 +126,8 @@ def run(args):
             # Multi-population haplotype comparison analysis: 2025-07-25
             logger.info(f"Performing multi-population comparison with {len(gv_list)} populations: {', '.join(pop_names)}")
             
-            # Create a MultiPopulationAnalyzer instance
-            analyzer = gene.MultiPopulationAnalyzer(gv_list, pop_names)
+            # Create a HaplotypeComparison instance
+            analyzer = haplotype.HaplotypeComparison(gv_list, pop_names)
             
             # Perform comparison analysis
             results = analyzer.compare_populations(merged_loci if multi_loci else [merged_loci[0]])
@@ -155,7 +155,7 @@ def run(args):
                 # Print summary to stdout
                 print(results['comparison_summary'])
         elif args.type == 'geno':
-            data = gv.get_multi_loci_geno_data(merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else gv.get_geno_data(*merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
+            data = gv.extract_multi_loci_genotypes(merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else gv.extract_genotypes(*merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")
                 continue
@@ -164,7 +164,7 @@ def run(args):
             else:
                 print(data)
         elif args.type == 'table':
-            data = gv.multi_loci_hap_table(merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else gv.hap_table(*merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
+            data = haplotype.extract_multi_loci_haplotype_table(gv, merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else haplotype.extract_haplotype_table(gv, *merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")
             if task_out:
@@ -172,7 +172,7 @@ def run(args):
             else:
                 print(data)
         elif args.type == 'group':
-            data = gv.multi_loci_hap_groups(merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else gv.hap_groups(*merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
+            data = haplotype.extract_multi_loci_haplotype_groups(gv, merged_loci, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing) if multi_loci else haplotype.extract_haplotype_groups(gv, *merged_loci[0], het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")
             if task_out:
@@ -184,9 +184,9 @@ def run(args):
             if args.group:
                 groups = read_assignments(args.group, available_samples=gv.vcf_in.header.samples)
             if multi_loci:
-                data = gv.calc_multi_loci_hap_freq(merged_loci, groups, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
+                data = haplotype.calculate_multi_loci_haplotype_counts(gv, merged_loci, groups, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             else:
-                data = gv.calc_hap_freq(*merged_loci[0], groups, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
+                data = haplotype.calculate_haplotype_counts(gv, *merged_loci[0], groups, het_threshold=args.het, maf_threshold=args.maf, max_missing_threshold=args.max_missing)
             data.reset_index(inplace=True)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")
@@ -203,17 +203,9 @@ def run(args):
             # list all groups to calculate Pi
             for group in groups.groups.unique():
                 if multi_loci:
-                    pi_data = gv.get_multi_loci_pi_data(merged_loci,
-                                          size=getattr(args, 'size', 1),
-                                          step=getattr(args, 'step', 1),
-                                          sample_list=groups.query('groups == @group').samples.tolist(),
-                                          het_threshold=args.het)
+                    pi_data = population.calculate_multi_loci_pi(gv, merged_loci, size=getattr(args, 'size', 1), step=getattr(args, 'step', 1), sample_list=groups.query('groups == @group').samples.tolist(), het_threshold=args.het)
                 else:
-                    pi_data = gv.get_pi_data(*merged_loci[0],
-                                          size=getattr(args, 'size', 1),
-                                          step=getattr(args, 'step', 1),
-                                          sample_list=groups.query('groups == @group').samples.tolist(),
-                                          het_threshold=args.het)
+                    pi_data = population.calculate_pi(gv, *merged_loci[0], size=getattr(args, 'size', 1), step=getattr(args, 'step', 1), sample_list=groups.query('groups == @group').samples.tolist(), het_threshold=args.het)
                 data_list.append(pd.DataFrame(pi_data, columns=['chrom', 'start', 'end', 'n_bases', 'counts', 'pi']).assign(groups=group))
             data = pd.concat(data_list)
             if data.empty:
@@ -232,19 +224,9 @@ def run(args):
             # list all pairwise comparisons to calculate Fst
             for pair in combinations(groups.groups.unique(), 2):
                 if multi_loci:
-                    fst_data = gv.get_multi_loci_fst_data(merged_loci,
-                                           groups.query('groups == @pair[0]').samples.tolist(),
-                                           groups.query('groups == @pair[1]').samples.tolist(),
-                                           size=getattr(args, 'size', 1),
-                                           step=getattr(args, 'step', 1),
-                                           het_threshold=args.het)
+                    fst_data = population.calculate_multi_loci_fst(gv, merged_loci, groups.query('groups == @pair[0]').samples.tolist(), groups.query('groups == @pair[1]').samples.tolist(), size=getattr(args, 'size', 1), step=getattr(args, 'step', 1), het_threshold=args.het)
                 else:
-                    fst_data = gv.get_fst_data(*merged_loci[0],
-                                           groups.query('groups == @pair[0]').samples.tolist(),
-                                           groups.query('groups == @pair[1]').samples.tolist(),
-                                           size=getattr(args, 'size', 1),
-                                           step=getattr(args, 'step', 1),
-                                           het_threshold=args.het)
+                    fst_data = population.calculate_fst(gv, *merged_loci[0], groups.query('groups == @pair[0]').samples.tolist(), groups.query('groups == @pair[1]').samples.tolist(), size=getattr(args, 'size', 1), step=getattr(args, 'step', 1), het_threshold=args.het)
                 data_list.append(pd.DataFrame(fst_data, columns=['chrom', 'start', 'end', 'counts', 'fst']).assign(groups='_'.join(pair)))
             data = pd.concat(data_list)
             if data.empty:
@@ -263,18 +245,10 @@ def run(args):
             # list all groups to calculate Tajima's D
             for group in groups.groups.unique():
                 if multi_loci:
-                    tajima_d_data = gv.get_multi_loci_tajima_d_data(merged_loci,
-                                          size=getattr(args, 'size', 1),
-                                          step=getattr(args, 'step', 1),
-                                          sample_list=groups.query('groups == @group').samples.tolist(),
-                                          het_threshold=args.het)
+                    tajima_d_data = population.calculate_multi_loci_tajima_d(gv, merged_loci, size=getattr(args, 'size', 1), step=getattr(args, 'step', 1), sample_list=groups.query('groups == @group').samples.tolist(), het_threshold=args.het)
                 else:
-                    tajima_d_data = gv.get_tajima_d_data(*merged_loci[0],
-                                          size=getattr(args, 'size', 1),
-                                          step=getattr(args, 'step', 1),
-                                          sample_list=groups.query('groups == @group').samples.tolist(),
-                                          het_threshold=args.het)
-                data_list.append(pd.DataFrame(tajima_d_data, columns=gene.TAJIMA_COLUMNS).assign(groups=group))
+                    tajima_d_data = population.calculate_tajima_d(gv, *merged_loci[0], size=getattr(args, 'size', 1), step=getattr(args, 'step', 1), sample_list=groups.query('groups == @group').samples.tolist(), het_threshold=args.het)
+                data_list.append(pd.DataFrame(tajima_d_data, columns=population.TAJIMA_COLUMNS).assign(groups=group))
             data = pd.concat(data_list)
             if data.empty:
                 logger.warning(f"The {args.type} data of target gene or region is empty!!!")

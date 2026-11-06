@@ -19,8 +19,9 @@ import pandas as pd
 import pysam
 
 from hastat.func import view, network
-from hastat.utils.gene import GeneVariant, MultiPopulationAnalyzer
-from hastat.utils.network_io import read_network
+from hastat.utils.variant import VariantData
+from hastat.utils.haplotype import HaplotypeComparison
+from hastat.dataio.network import read_network
 from test_population import write_vcf
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,13 +86,13 @@ class CompareValidation(unittest.TestCase):
             path = write_vcf(self.root / f'input{self.counter}.vcf', rows, samples=samples)
             handle = pysam.VariantFile(path)
             self.addCleanup(handle.close)
-            variants.append(GeneVariant(handle))
+            variants.append(VariantData(handle))
             paths.append(path)
         return variants, paths
 
     def analyze(self, populations, names=('P', 'Q'), loci=(('chr1', 1, 100),)):
         variants, _ = self.variants(populations)
-        return MultiPopulationAnalyzer(variants, names).compare_populations(loci)
+        return HaplotypeComparison(variants, names).compare_populations(loci)
 
     def test_complete_profiles_and_merged_identity(self):
         populations = [(P, NAMES), (Q, NAMES)]
@@ -178,10 +179,10 @@ class CompareValidation(unittest.TestCase):
         class Stub:
             def __init__(self, frame):
                 self.frame = frame
-            def get_geno_data(self, *args):
+            def extract_genotypes(self, *args):
                 return self.frame
-        first = MultiPopulationAnalyzer([Stub(data), Stub(data)], ['P', 'Q']).compare_populations([('chr1', 1, 40)])
-        second = MultiPopulationAnalyzer([Stub(data.iloc[::-1, ::-1]), Stub(data.iloc[::-1])], ['P', 'Q']).compare_populations([('chr1', 1, 40)])
+        first = HaplotypeComparison([Stub(data), Stub(data)], ['P', 'Q']).compare_populations([('chr1', 1, 40)])
+        second = HaplotypeComparison([Stub(data.iloc[::-1, ::-1]), Stub(data.iloc[::-1])], ['P', 'Q']).compare_populations([('chr1', 1, 40)])
         pd.testing.assert_frame_equal(first['merged_hap_table'], second['merged_hap_table'])
         self.assertEqual(tuple(first['merged_hap_table'].MergedHap1), (2, 0))
 
@@ -203,8 +204,8 @@ class CompareValidation(unittest.TestCase):
         variants, _ = self.variants([(P, NAMES), (Q, NAMES)])
         for labels in (['P'], ['P', 'P'], ['', 'Q'], ['merged', 'Q'], ['../P', 'Q'], ['P ', 'Q']):
             with self.subTest(labels=labels), self.assertRaises(ValueError):
-                MultiPopulationAnalyzer(variants, labels)
-        analyzer = MultiPopulationAnalyzer(variants, ['群体P', 'Q'])
+                HaplotypeComparison(variants, labels)
+        analyzer = HaplotypeComparison(variants, ['群体P', 'Q'])
         for loci in ([], [('chr1', 0, 10)], [('chr1', 20, 10)]):
             with self.assertRaises(ValueError):
                 analyzer.compare_populations(loci)
@@ -260,9 +261,9 @@ class CompareValidation(unittest.TestCase):
 
     def test_hash_seed_independence(self):
         _, paths = self.variants([(P, NAMES), (Q, NAMES)])
-        script = ('import json,pysam; from hastat.utils.gene import GeneVariant,MultiPopulationAnalyzer; '
-                  f'v=[GeneVariant(pysam.VariantFile(p)) for p in {paths!r}]; '
-                  'r=MultiPopulationAnalyzer(v,["P","Q"]).compare_populations([("chr1",1,100)]); '
+        script = ('import json,pysam; from hastat.utils.variant import VariantData; from hastat.utils.haplotype import HaplotypeComparison; '
+                  f'v=[VariantData(pysam.VariantFile(p)) for p in {paths!r}]; '
+                  'r=HaplotypeComparison(v,["P","Q"]).compare_populations([("chr1",1,100)]); '
                   'print(json.dumps({k:x.to_csv(index=False) for k,x in r.items()},sort_keys=True))')
         runs = [subprocess.run([sys.executable, '-c', script], cwd=ROOT,
                 env=dict(os.environ, PYTHONHASHSEED=seed), check=True, capture_output=True, text=True).stdout

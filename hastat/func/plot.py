@@ -6,7 +6,7 @@
 
 import time
 from hastat.log.logger import logger
-from hastat.viz import bar, pie, box, gene2, network
+from hastat.viz import bar, pie, box, gene, network
 from hastat.manage import Manager
 import matplotlib as mpl
 mpl.use('Agg')
@@ -16,7 +16,7 @@ manager = Manager()
 manager.register('bar', bar.HapBar)
 manager.register('pie', pie.HapPie)
 manager.register('box', box.HapBox)
-manager.register('gene', gene2.FancyGene)
+manager.register('gene', gene.FancyGene)
 manager.register('network', network.FancyNetwork)
 
 
@@ -86,7 +86,7 @@ def run(args):
         config = {
             'data': {
                 'gff_file': args.gff,
-                'genes': args.genes,
+                'gene': args.gene,
                 'toml_file': args.toml
             },
             'plot': {
@@ -116,9 +116,9 @@ def run(args):
                 'edge_label_symbol': getattr(args, 'edge_label_symbol', None),
                 'edge_label_size': getattr(args, 'edge_label_size', 8),
                 'edge_label_color': getattr(args, 'edge_label_color', 'black'),
-                'layout': getattr(args, 'layout', 'spring'),
+                'layout': args.layout,
                 'k': getattr(args, 'k', None),
-                'node_scale_factor': getattr(args, 'node_scale_factor', 1.0),
+                'node_scale_factor': args.node_scale_factor,
                 'node_color': getattr(args, 'node_color', None),
                 'node_alpha': getattr(args, 'node_alpha', 0.8),
                 'edge_color': getattr(args, 'edge_color', 'gray'),
@@ -126,7 +126,7 @@ def run(args):
                 'edge_alpha': getattr(args, 'edge_alpha', 0.6),
                 'edge_style': getattr(args, 'edge_style', 'line'),
                 'seed': getattr(args, 'seed', None),
-                'title': getattr(args, 'title', 'Haplotype Network'),
+                'title': args.title,
                 'legend_label_spacing': getattr(args, 'legend_label_spacing', 2),
                 'legend_handle_text_pad': getattr(args, 'legend_handle_text_pad', 1),
             }

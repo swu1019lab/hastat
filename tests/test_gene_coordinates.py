@@ -9,11 +9,11 @@ import unittest
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, FancyArrowPatch
+from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 
-from hastat.viz.gene2 import FancyGene
+from hastat.viz.gene import FancyGene
 
 
 def coordinate_inputs(folder, case='plus_flanks'):
@@ -37,12 +37,12 @@ def coordinate_inputs(folder, case='plus_flanks'):
                          ('fst',[-.1] if single else [-.1,.1,np.nan,.2,.3])]:
         pd.DataFrame(dict(chrom='1',start=positions,end=positions,**{stat:values})).to_csv(folder/f'{stat}.csv',index=False)
     custom = case == 'custom_frame'
-    (folder/'gene.toml').write_text('[default]\nbbox=[0.1,0.1,0.8,0.8]\n' +
-        ('xy=[0.15,0.78]\nwidth=0.65\n' if custom else 'xy=[0.0,0.78]\nwidth=1.0\n') +
-        'height=0.035\nann_y=0.92\nhap_y=0.52\nhap_height=0.12\nhap_freq_show=false\n'
+    bbox = [0.22, 0.1, 0.52, 0.8] if custom else [0.1, 0.1, 0.8, 0.8]
+    (folder/'gene.toml').write_text(f'[default]\nbbox={bbox}\ngene_y=0.78\n'
+        'gene_height=0.035\nann_y=0.92\nhap_y=0.52\nhap_height=0.12\naf_show=false\n'
         'hap_file="gene"\nann_file="ann.csv"\npi_file="pi.csv"\nfst_file="fst.csv"\n'
         'pi_y=0.26\npi_height=0.14\nfst_y=0.0\nfst_height=0.14\n')
-    config = dict(data=dict(gff_file=str(folder/'gene.gff3'),genes=['G1'],toml_file=str(folder/'gene.toml')),
+    config = dict(data=dict(gff_file=str(folder/'gene.gff3'),gene='G1',toml_file=str(folder/'gene.toml')),
                   plot=dict(width=10,height=7,upstream=upstream,downstream=downstream))
     return config, table
 
@@ -70,10 +70,11 @@ class GeneCoordinateValidation(unittest.TestCase):
     def test_plus_and_minus_strand_flanks_and_arrow_direction(self):
         for case, interval, direction in [('plus_flanks',(50,220),1),('minus_flanks',(80,250),-1)]:
             obj,_ = self.draw(case)
-            gene = obj.gene_data['G1']
+            gene = obj.gene_data
             self.assertEqual((gene['start'],gene['end']),interval)
-            arrow = next(p for p in obj.ax.patches if isinstance(p,FancyArrowPatch))
-            self.assertEqual(np.sign(arrow._posA_posB[1][0]-arrow._posA_posB[0][0]),direction)
+            marker = next(t for t in obj.ax.texts if t.get_gid()=='strand-direction')
+            self.assertEqual(marker.get_text(), '>' if direction == 1 else '<')
+            self.assertIsNone(marker.arrow_patch)
             label = next(t for t in obj.ax.texts if t.get_text() == 'G1')
             self.assertAlmostEqual(label.xy[0],.1+.8*(150-interval[0]+.5)/171)
             self.assertLess(*obj.ax.child_axes[0].get_xlim())
@@ -81,7 +82,7 @@ class GeneCoordinateValidation(unittest.TestCase):
     def test_rendered_pixel_alignment_across_all_physical_tracks(self):
         for case in ['plus_flanks','minus_flanks','custom_frame','single_base']:
             obj,table = self.draw(case)
-            start,end = (obj.gene_data['G1'][k] for k in ['start','end'])
+            start,end = (obj.gene_data[k] for k in ['start','end'])
             x0,width = (.22,.52) if case == 'custom_frame' else (.1,.8)
             for i,pos in enumerate(table.pos):
                 expected_x = x0+width*(pos-start+.5)/(end-start+1)
@@ -96,7 +97,7 @@ class GeneCoordinateValidation(unittest.TestCase):
     def test_haplotype_columns_remain_equal_spaced_and_counts_unchanged(self):
         obj, table = self.draw('custom_frame')
         np.testing.assert_allclose([line.get_xdata()[0] for line in obj.ax.lines[::2]],
-                                  .1+.8*(np.arange(len(table))+.5)/len(table))
+                                  .22+.52*(np.arange(len(table))+.5)/len(table))
         self.assertEqual([t.get_text() for t in obj.ax.texts if t.get_text().startswith('Hap')],
                          ['Hap1 (n=2)','Hap2 (n=1)'])
 
@@ -141,7 +142,8 @@ class GeneCoordinateValidation(unittest.TestCase):
         rectangles = [p for p in obj.ax.patches if isinstance(p,Rectangle)][:3]
         self.assertAlmostEqual(rectangles[0].get_x(),.1)
         self.assertAlmostEqual(rectangles[-1].get_x()+rectangles[-1].get_width(),.9)
-        self.assertEqual(obj.ax.child_axes[0].get_xlim(),(99.5,200.5))
+        for axis in obj.ax.child_axes:
+            self.assertEqual(axis.get_xlim(), (49.5, 220.5))
 
     def test_cli_flanks_and_single_base_from_another_directory(self):
         other = self.root/'other'
@@ -155,9 +157,9 @@ class GeneCoordinateValidation(unittest.TestCase):
         for case in ['plus_flanks','minus_flanks','single_base']:
             cfg,_ = coordinate_inputs(self.root/case,case)
             path = self.root/case/'plot.pdf'
-            result = subprocess.run(cli+['plot','gene','--gff',cfg['data']['gff_file'],'--genes','G1',
-                '--toml',cfg['data']['toml_file'],'--upstream',str(cfg['plot']['upstream']),
-                '--downstream',str(cfg['plot']['downstream']),'-o',str(path)],env=env,cwd=other,capture_output=True,text=True)
+            result = subprocess.run(cli+['plot','gene','--gff',cfg['data']['gff_file'],'--gene','G1',
+                '--toml',cfg['data']['toml_file'],'--up',str(cfg['plot']['upstream']),
+                '--down',str(cfg['plot']['downstream']),'-o',str(path)],env=env,cwd=other,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertGreater(path.stat().st_size,1000)
 

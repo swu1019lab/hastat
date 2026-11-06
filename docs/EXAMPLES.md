@@ -1,25 +1,28 @@
 # Complete graphical examples
 
-One complete example is shown for each plot type: bar, pie, box, network and
-gene. All five use the same **160 synthetic samples, eight haplotypes and
-48 variants**. Panel1/Panel2/Panel3 contain 52/54/54 samples; Hap1–Hap8 contain
-36/30/24/20/18/14/10/8. Trait values and Pi/Fst estimates are illustrative.
+The [gallery](gallery.html) shows the GeneA plot with 1 Mb flanks, haplotype
+networks, and bar, pie and box plots.
+The haplotype matrix contains 48 variants from **160 synthetic samples and eight
+haplotypes**. The sample metadata identifies 49 Wild, 61 Landrace and 50 Cultivar
+samples. Hap1–Hap8 contain 36/30/24/20/18/14/10/8 samples, respectively.
+Each haplotype contains all three material types. The window estimates use
+the example VCF and these same sample assignments.
 
 After installing hastat, run from the repository root:
 
     bash docs/examples/commands.sh
 
-The script creates five PDFs in docs/images. The [illustrated gallery](gallery.html)
-shows the exact individual commands. Its supplied figures also have editable
-PDF/SVG and 600 dpi PNG exports.
+The script creates `docs/images/gene_tracks.pdf` and separate `docs/images/mst.png`
+and `docs/images/msn.png` network plots. Each network plotting call uses one file.
+The gallery displays PNG previews and their plotting commands.
+Run the tutorial commands below from `docs/examples`.
 
 All ordinary `hastat plot` exports also embed TrueType fonts in PDF
 (`pdf.fonttype=42`) and preserve text elements in SVG (`svg.fonttype=none`).
 No additional option is required. For text editing in Adobe Illustrator, install
 the fonts used by the plot or substitute available fonts. The supplied examples
-use DejaVu Sans, included with Matplotlib. Text and font structures are verified;
-editing inside Illustrator itself has not been tested. Equations or rotated
-labels may import as multiple text objects.
+use DejaVu Sans, included with Matplotlib. Equations and rotated labels may
+import as multiple text objects.
 
 ## Inputs
 
@@ -27,24 +30,29 @@ labels may import as multiple text objects.
 |:---|:---|
 | [gene.table.csv](examples/gene.table.csv) | chrom,pos,ref,alt followed by eight haplotype genotype-state columns; 48 rows. |
 | [gene.group.csv](examples/gene.group.csv) | Unique samples,haplotypes assignments; supplies sample counts. |
-| [populations.csv](examples/populations.csv) | Unique samples,population assignments for three populations. |
+| [populations.csv](examples/populations.csv) | Sample ID and material type (Wild, Landrace or Cultivar). Used for network pies, allele frequencies, window statistics, and bar and pie counts. |
 | [phenotypes.csv](examples/phenotypes.csv) | samples,Trait numerical observations. |
-| [genes.gff3](examples/genes.gff3) | GeneA, chromosome 1, bases 2501–6500, plus strand and five CDS blocks. |
-| [hap_colors.csv](examples/hap_colors.csv) | Headerless haplotype/category pairs; ClassA: Hap1–3, ClassB: Hap4–5, ClassC: Hap6–8. |
-| [annotations.csv](examples/annotations.csv) | chrom,pos,ann labels at selected upstream, coding and downstream sites. |
-| [gene.pi.csv](examples/gene.pi.csv), [gene.fst.csv](examples/gene.fst.csv) | Forty 200 bp windows per series, over bases 501–8500; three Pi populations and three pairwise Fst series. |
-| [gene.vcf](examples/gene.vcf) | Diploid genotypes for the same 160 synthetic samples and 48 variants. |
-| [gene.tajima_d.csv](examples/gene.tajima_d.csv) | Tool-calculated Tajima's D for three populations; 1 kb windows, 500 bp steps, clipped at base 8500. |
+| [genes.gff3](examples/genes.gff3) | GeneA, chromosome 1, bases 2,000,001–2,004,000, plus strand and five CDS blocks. |
+| [hap_colors.csv](examples/hap_colors.csv) | Haplotype row colors: group1 contains Hap1–3, group2 contains Hap6–7, and group3 contains Hap4, Hap5 and Hap8. The CSV has no header. |
+| [annotations.csv](examples/annotations.csv) | Positions and categories for the 48 plotted variants, with optional labels on two CDS sites. |
+| [gene.pi.csv](examples/gene.pi.csv), [gene.fst.csv](examples/gene.fst.csv) | 41 windows from 1,000,001 to 3,004,000 per series: π for each material type and Fst for each pair of types. Window size and step are both 50 kb. |
+| [gene.vcf](examples/gene.vcf) | Diploid genotypes for all 160 samples, including the 48 displayed variants and additional flanking sites used in the statistics tracks. |
+| [gene.vcf.gz](examples/gene.vcf.gz) and [its tabix index](examples/gene.vcf.gz.tbi) | Indexed copy used directly by the gene figure. |
+| [gene.tajima_d.csv](examples/gene.tajima_d.csv) | Tajima's D for the three material types, using the same 41 windows as π and Fst. The last window is clipped at 3,004,000. |
 | [gene_tracks.toml](examples/gene_tracks.toml) | Complete gene-plot configuration, including frequency and window tracks. |
-| [gene.network.csv](examples/gene.network.csv) | MSN edges generated from the same 48-variant table. |
+| [gene.mst.csv](examples/gene.mst.csv), [gene.msn.csv](examples/gene.msn.csv) | MST and MSN edges generated from the same 48-variant table. |
 
-Coordinates are 1-based inclusive. This complete example uses homozygous states
+Coordinates are 1-based inclusive. The 48-site haplotype matrix uses homozygous states
 0 (reference) and 2 (alternate); the tool also recognizes 1 (heterozygous) and -1
 (missing). Synthetic sample identifiers are demonstration labels.
 
 ## 1. Population sample counts
 
 ![Population sample counts](images/bar.png)
+
+```bash
+hastat plot bar --sample_hap gene.group.csv --sample_group populations.csv --x_label Material --y_label Samples --width 10 --height 4 -o ../images/bar.pdf
+```
 
 Stack segments are counts of matched samples assigned to each haplotype.
 For relative composition, add --calc_percentage and use --y_label Fraction:
@@ -55,6 +63,10 @@ that option returns values between 0 and 1.
 
 ![Population composition](images/pie.png)
 
+```bash
+hastat plot pie --sample_hap gene.group.csv --sample_group populations.csv --width 11 --height 4 -o ../images/pie.pdf
+```
+
 Each population has its own pie, with the matched sample total below it.
 Haplotype colors are shared with the bar plot.
 [PDF](images/pie.pdf) · [SVG](images/pie.svg)
@@ -62,6 +74,10 @@ Haplotype colors are shared with the bar plot.
 ## 3. Trait distributions and comparisons
 
 ![Trait distributions](images/box.png)
+
+```bash
+hastat plot box --sample_hap gene.group.csv --sample_phe phenotypes.csv --method TukeyHSD --comparisons Hap1 Hap2 --comparisons Hap1 Hap4 --comparisons Hap1 Hap8 --width 10 --height 5 -o ../images/box.pdf
+```
 
 Points show observations; boxes show medians and interquartile ranges.
 Whiskers extend to the most extreme observations within 1.5 interquartile ranges.
@@ -72,67 +88,87 @@ TukeyHSD assumes independent observations, approximately normal within-group
 errors and common within-group variance.
 [PDF](images/box.pdf) · [SVG](images/box.svg)
 
-## 4. Complete haplotype network
+## 4. Minimum spanning tree and network
 
-![Population-aware network](images/network.png)
+![MST and MSN at the same node positions](images/mst_msn.png)
 
-Eight labeled nodes show all three population compositions. Marker area follows
-the tool's square-root scaling of sample count; the size legend is in sample
-counts. Edges are hidden beneath nodes, including translucent pie sectors.
-The network uses the same group palette as the Pi curves, with opaque sectors
-in this example. The external Samples (n) legend shows 8, 20 and 36 samples;
-circle sizes exactly match the corresponding node sizes, with separated labels.
-Edge numbers count unequal genotype states across common complete sites.
-MSN retains all minimum-spanning alternatives, which can include tied routes.
-The layout does not imply ancestry, evolutionary time or geographic distance.
-[PDF](images/network.pdf) · [SVG](images/network.svg)
+The left panel shows one minimum spanning tree (seven edges). The right panel
+adds three equal-cost alternatives: Hap1–Hap3 (16 differing sites), Hap1–Hap7
+(16) and Hap6–Hap8 (18). Blue dashed lines distinguish those edges from the
+displayed tree. The two panels share the same weighted Kamada–Kawai coordinates
+and node size scale. Pie sectors show the fractions of Wild, Landrace and
+Cultivar samples assigned to each haplotype. For example, Hap1 has 14 Wild,
+14 Landrace and 8 Cultivar samples. Circle area is proportional to sample count,
+using the nested 8-, 20- and 36-sample circles as a reference. Only samples
+with a value in the selected metadata column contribute to the counts.
+The network represents genotype differences, not ancestry or evolutionary time.
+[PDF](images/mst_msn.pdf) · [SVG](images/mst_msn.svg)
 
-## 5. Complete gene haplotype figure
+## 5. Gene haplotypes with 1 Mb flanks
 
 ![Complete gene haplotype figure](images/gene_tracks.png)
 
-Read from top to bottom:
+Use the [recommended GeneA TOML](examples/gene_tracks.toml) with the supplied
+[example inputs](examples/), including the indexed VCF. From that directory, run:
 
-1. Annotations and five CDS blocks across a 4 kb gene with 2 kb on each side.
-   The strand line lies below the feature blocks; visible arrowheads in the gaps
-   show direction. A separate direction marker covers single-feature genes.
-2. A 48-column variant matrix, eight haplotype labels with sample counts,
-   category colors and average-linkage clustering.
-3. Three REF/ALT proportion strips for ClassA/B/C. Blue means reference and
-   coral means alternate. These count distinct haplotype profiles in each
-   category, without weighting by the sample counts in the row labels.
-4. Pi for three populations, followed by all three pairwise Fst series.
-   Both use existing 200 bp window estimates. Pi is displayed in units of 10⁻³.
-5. Tajima's D for three populations, calculated from gene.vcf with 1 kb windows
-   and 500 bp steps. Points mark window midpoints; the dashed line marks zero.
-   Undefined values remain gaps, including windows with fewer than three segregating sites.
+```bash
+hastat plot gene --gff genes.gff3 --gene GeneA --up 2000 --down 2000 --width 15 --height 17.17300419287212 --toml gene_tracks.toml -o gene_tracks.pdf
+```
+
+The command selects GeneA, its GFF, both flanks and the canvas dimensions in inches.
+`[default]` sets shared positions and heights within each gene's `bbox` (0 at the
+bottom, 1 at the top). `[GeneA]` inherits those settings and supplies its own inputs.
+Select a different gene from the same TOML by passing its ID to `--gene`.
+The panel `bbox` sets the left and right edges of every track. `gene_y` sets the vertical center of the gene.
+Each statistics track shows all windows for GeneA's chromosome in its own CSV.
+The supplied windows extend 1 Mb on either side of GeneA. The gene structure
+displays 2 kb of flanking sequence on each side.
+With `layout = "fixed"`, increasing `pi_y` for GeneA moves only its Pi axis upwards.
+`ld_y` anchors the top of the LD triangle. The VCF supplies data for AF and LD;
+changing input paths does not select a layout. The panel order from top to bottom is:
+
+1. Pi and Fst for the three populations and their pairwise comparisons, using
+   the supplied 50 kb window estimates. Pi is displayed in units of 10⁻³.
+   With `shade_gene = true`, a gray rectangle marks GeneA (2,000,001–2,004,000) on all
+   three statistics tracks. Its flanking regions lie outside the rectangle.
+2. Tajima's D for the same three material types and 50 kb windows. Points mark window
+   midpoints and the dashed line marks zero.
+3. The five dark-blue CDS blocks of a 4 kb gene with 2 kb flanks. A single
+   `>` or `<` at the strand-direction end marks orientation, without a connecting
+   tail outside the gene. Short labels identify selected variant positions.
+4. An annotation strip above the 48 variant columns and eight clustered
+   haplotype rows, with sample counts and haplotype category colors.
+5. REF/ALT allele frequencies in Wild, Landrace and Cultivar. Pale blue denotes
+   REF and dark blue denotes ALT. At 1:1,998,150, Hap2 and Hap3 carry ALT. The called
+   ALT fractions are 40/98 (40.8%) in Wild, 46/122 (37.7%) in Landrace and
+   22/100 (22.0%) in Cultivar.
+6. Whole-population LD for the 48 displayed sites in the same column order.
+   Each diamond shows pairwise dosage r² from the 160 VCF samples, with gray
+   for undefined pairs. The triangle is automatically half as high as it is wide.
 
 The file prefix requires gene.table.csv and discovers optional gene.group.csv.
+The annotation strip distinguishes upstream, CDS, intron and downstream sites.
+Its legend occupies one row directly above the gene and its callouts.
+The optional label field highlights two positions. Short labels are placed in
+up to two rows, and annotations at the same variant share a cell.
+Set `ld_show = false` to hide LD while retaining VCF-derived AF. Use
+`ld_cmap` and `ld_colorbar` to choose the palette and toggle the color scale.
 When the group file is absent, labels omit sample counts. hap_color_file
-separately controls the category strip. All paths in the TOML are relative to
+controls the row colors. The legend below the tree uses the category names in
+that file. All paths in the TOML are relative to
 that TOML file.
 
 Clustering uses average linkage on Hamming distances over common complete loci.
 It describes profile similarity, not a phylogeny or a significance test.
-The 4 kb gene occupies 50.0% of the 8 kb interval. Genomic features, annotations,
-variant endpoints and window midpoints share physical coordinates; matrix
-columns stay equally spaced.
+The 4 kb gene occupies 50.0% of the 8 kb gene view and about 0.2% of each
+2.004 Mb statistics track. The matrix columns stay equally spaced.
 
-The plot reads existing Pi/Fst/Tajima's D CSV values. For biological analyses,
-generate corresponding windows using `hastat view -t pi`, `-t fst` or
-`-t tajima_d` over the same region and populations. The example script computes
-Tajima's D from the supplied synthetic VCF before plotting. Its normal CSV uses
-`chrom,start,end,counts,tajima_d,groups`. Set the track in the TOML:
-
-```toml
-tajima_d_file="gene.tajima_d.csv"
-tajima_d_y=0.0
-tajima_d_height=0.12
-tajima_d_style="line"
-```
-
-`tajima_d_y` and `tajima_d_height` position the track relative to the gene's
-bounding box. The complete example reserves separate space below Pi and Fst.
+The example script reads the supplied sample-to-material table and runs `hastat view` for
+Pi, Fst and Tajima's D on the same samples and genomic interval. Undefined
+estimates appear as gaps. The gene plot then reads the three CSV files.
+The Tajima's D CSV uses
+`chrom,start,end,counts,tajima_d,groups`. In the linked TOML, `tajima_d_y`
+and `tajima_d_height` position its axis beneath Pi and Fst.
 [PDF](images/gene_tracks.pdf) · [SVG](images/gene_tracks.svg)
 
 

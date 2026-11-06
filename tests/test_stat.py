@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 from scipy import stats
-from hastat.utils.stat import HapAnovaTest, PAIR_COLUMNS
+from hastat.utils.association import HaplotypeAssociation, PAIR_COLUMNS
 
 
 def frames(arrays):
@@ -19,7 +19,7 @@ def frames(arrays):
 
 
 def run(arrays, method='TukeyHSD', **kwargs):
-    return HapAnovaTest(*frames(arrays), min_hap_size=3, method=method, **kwargs)
+    return HaplotypeAssociation(*frames(arrays), min_hap_size=3, method=method, **kwargs)
 
 
 class StatisticalValidation(unittest.TestCase):
@@ -75,7 +75,7 @@ class StatisticalValidation(unittest.TestCase):
         pheno=pheno.iloc[:-1].copy(); pheno['other']=pheno.trait
         pheno.loc[pheno.samples.str.startswith('0_'),'other']=[1,np.nan,np.inf,-np.inf]
         pheno.loc[pheno.samples.str.startswith('1_'),'trait']=[4,5,np.nan,np.nan]
-        r=HapAnovaTest(pheno,groups,min_hap_size=3).result()
+        r=HaplotypeAssociation(pheno,groups,min_hap_size=3).result()
         self.assertEqual([x['groups'] for x in r['omnibus']],[2,2])
         self.assertEqual([x['n'] for x in r['omnibus']],[7,7])
         self.assertEqual({x['group1'] for x in r['comparisons'] if x['pheno']=='other'},{'Hap2'})
@@ -103,22 +103,22 @@ class StatisticalValidation(unittest.TestCase):
     def test_duplicate_samples_rejected(self):
         pheno,groups=frames([[1,2,3],[4,5,6]])
         for p,g in [(pd.concat([pheno,pheno.iloc[:1]]),groups),(pheno,pd.concat([groups,groups.iloc[:1]]))]:
-            with self.assertRaises(ValueError): HapAnovaTest(p,g,min_hap_size=3)
+            with self.assertRaises(ValueError): HaplotypeAssociation(p,g,min_hap_size=3)
         groups.loc[0,'samples']='  '+groups.loc[1,'samples']+' '
-        with self.assertRaises(ValueError): HapAnovaTest(pheno,groups,min_hap_size=3)
+        with self.assertRaises(ValueError): HaplotypeAssociation(pheno,groups,min_hap_size=3)
 
     def test_bad_values_and_options_rejected(self):
         p,g=frames([[1,2,3],[4,5,6]])
         p=p.astype({'trait':object});p.loc[0,'trait']='bad'
-        with self.assertRaises(ValueError): HapAnovaTest(p,g,min_hap_size=3)
+        with self.assertRaises(ValueError): HaplotypeAssociation(p,g,min_hap_size=3)
         for kwargs in [{'method':'unknown'},{'method':'AllPairTest'},{'min_hap_size':1},{'alpha':0},{'alpha':float('nan')}]:
-            with self.assertRaises(ValueError): HapAnovaTest(*frames([[1,2,3],[4,5,6]]),**kwargs)
+            with self.assertRaises(ValueError): HaplotypeAssociation(*frames([[1,2,3],[4,5,6]]),**kwargs)
 
     def test_order_invariance(self):
         p,g=frames([[1,3,5],[2,4,7,8],[5,7,9,11]])
         for method in ('TukeyHSD','WelchBonferroni'):
-            a=HapAnovaTest(p,g,3,method=method).comparisons
-            b=HapAnovaTest(p.sample(frac=1,random_state=8),g.sample(frac=1,random_state=3),3,method=method).comparisons
+            a=HaplotypeAssociation(p,g,3,method=method).comparisons
+            b=HaplotypeAssociation(p.sample(frac=1,random_state=8),g.sample(frac=1,random_state=3),3,method=method).comparisons
             pd.testing.assert_frame_equal(a,b,rtol=1e-12,atol=1e-12)
 
     def test_precision_and_csv_roundtrip(self):
@@ -140,7 +140,7 @@ class StatisticalValidation(unittest.TestCase):
     def test_unmatched_groups_reported(self):
         p,g=frames([[1,2,3],[4,5,6]])
         p['samples']='missing_'+p.samples
-        r=HapAnovaTest(p,g,3).result()
+        r=HaplotypeAssociation(p,g,3).result()
         self.assertEqual([x['n'] for x in r['groups']],[0,0])
         self.assertEqual(r['omnibus'][0]['status'],'insufficient_groups')
 

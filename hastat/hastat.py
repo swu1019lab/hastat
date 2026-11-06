@@ -37,9 +37,9 @@ def main():
                                  help='A file containing a list of gene IDs to be analyzed, one per line')
     exclusive_group.add_argument('--homo', type=str,
                                  help='Multiple homologous gene IDs separated by comma, e.g., gene1,gene2,gene3')
-    parser_view.add_argument('-u', '--upstream', type=int, default=0,
+    parser_view.add_argument('-u', '--up', dest='upstream', type=int, default=0, metavar='BP',
                              help='The upstream distance of the gene (default: 0)')
-    parser_view.add_argument('-d', '--downstream', type=int, default=0,
+    parser_view.add_argument('-d', '--down', dest='downstream', type=int, default=0, metavar='BP',
                              help='The downstream distance of the gene (default: 0)')
     parser_view.add_argument('-t', '--type', type=str, choices=['geno', 'table', 'group', 'freq', 'pi', 'fst', 'tajima_d', 'compare'],
                              default='group', help='The data type to be analyzed (default: %(default)s)')
@@ -148,8 +148,8 @@ def main():
     
     # network plot subcommand
     parser_network = plot_subparsers.add_parser('network', help='Create network plot for haplotype network analysis')
-    parser_network.add_argument('--file', type=str, required=True,
-                               help='The network file (output from network command)')
+    parser_network.add_argument('--file', type=str, required=True, metavar='NETWORK',
+                               help='Input network file')
     parser_network.add_argument('--sample_hap', type=str,
                                help='CSV file with sample haplotype data (samples, haplotypes)')
     parser_network.add_argument('--sample_group', type=str,
@@ -162,7 +162,7 @@ def main():
                            help='Figure width in inches (default: %(default)s)')
     parser_network.add_argument('--height', type=float, default=8,
                            help='Figure height in inches (default: %(default)s)')
-    parser_network.add_argument('--layout', type=str, default='spring',
+    parser_network.add_argument('--layout', type=str, default='kamada_kawai',
                            choices=['spring', 'circular', 'kamada_kawai', 'fruchterman_reingold', 'shell', 'spectral', 'random'],
                            help='Network layout algorithm (default: %(default)s)')
     parser_network.add_argument('-k', '--k', type=float, default=None,
@@ -181,8 +181,8 @@ def main():
                            help='Edge label font size (default: %(default)s)')
     parser_network.add_argument('--edge_label_color', type=str, default='black',
                            help='Edge label color (default: %(default)s)')
-    parser_network.add_argument('--node_scale_factor', type=float, default=1.0,
-                           help='Node size scaling factor (default: %(default)s)')
+    parser_network.add_argument('--node_scale_factor', type=float,
+                           help='Squared marker diameter per sample (pt²); default fits the largest marker to 52 pt')
     parser_network.add_argument('--node_color', type=str, nargs='*',
                            help='Custom colors for population groups. Provide one or more colors in hex format (e.g., #FF0000 #00FF00 #0000FF)')
     parser_network.add_argument('--node_alpha', type=float, default=0.8,
@@ -198,24 +198,24 @@ def main():
                            help='Edge drawing style: line (straight) or curve (curved) (default: %(default)s)')
     parser_network.add_argument('--seed', type=int, default=None,
                            help='Random seed for reproducible layouts (default: %(default)s)')
-    parser_network.add_argument('--title', type=str, default='Haplotype Network',
-                           help='Plot title (default: %(default)s)')
+    parser_network.add_argument('--title', type=str, help='Optional figure title')
     parser_network.add_argument('--legend_label_spacing', type=float, default=2,
                            help='The vertical space between the legend entries, in font-size units. (default: %(default)s)')
     parser_network.add_argument('--legend_handle_text_pad', type=float, default=1,
                            help='The pad between the legend handle and text, in font-size units. (default: %(default)s)')
 
     # gene plot subcommand
-    parser_gene = plot_subparsers.add_parser('gene', help='Create gene structure plot with haplotype information')
+    parser_gene = plot_subparsers.add_parser('gene', allow_abbrev=False,
+                                             help='Plot one gene with its haplotype information')
     parser_gene.add_argument('--gff', type=str, required=True,
                             help='The GFF file containing the gene annotation')
-    parser_gene.add_argument('--genes', type=str, nargs='+', required=True,
-                            help='The gene IDs for the target region, which should be provided with the GFF file')
+    parser_gene.add_argument('--gene', action='append', required=True, metavar='ID',
+                             help='One gene ID from the GFF file')
     parser_gene.add_argument('--toml', type=str, required=True,
                             help='The toml file containing the gene visualization configuration')
-    parser_gene.add_argument('--upstream', type=int, default=0,
+    parser_gene.add_argument('--up', dest='upstream', type=int, default=0, metavar='BP',
                             help='The upstream distance of the gene (default: %(default)s)')
-    parser_gene.add_argument('--downstream', type=int, default=0,   
+    parser_gene.add_argument('--down', dest='downstream', type=int, default=0, metavar='BP',
                             help='The downstream distance of the gene (default: %(default)s)')
     parser_gene.add_argument('-o', '--output', type=str, required=True,
                             help='Output figure file path')
@@ -249,6 +249,10 @@ def main():
     parser_network.set_defaults(func=network.run)
 
     args = parser.parse_args()
+    if args.command == 'plot' and args.plot_type == 'gene':
+        if len(args.gene) != 1:
+            parser_gene.error('specify --gene once per plot')
+        args.gene = args.gene[0]
 
     # Set up logging
     if args.log:

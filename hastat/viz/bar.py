@@ -10,7 +10,7 @@ from matplotlib import axes
 import matplotlib.pyplot as plt
 from hastat.viz._export import save_figure
 from matplotlib.colors import LinearSegmentedColormap
-from hastat.utils.plot_data import read_sample_csv, sample_frame, select_haplotypes, merge_samples, grouped_counts
+from hastat.dataio.table import read_sample_csv, normalize_sample_table, select_haplotypes, merge_samples, grouped_counts
 
 
 class HapBar(object):
@@ -37,7 +37,7 @@ class HapBar(object):
         :param labels: a list contained haplotype group names to be analyzed
         :return:
         """
-        self.sample_hap = select_haplotypes(sample_frame(df, 'haplotypes'), haplotypes)
+        self.sample_hap = select_haplotypes(normalize_sample_table(df, 'haplotypes'), haplotypes)
 
     def add_group(self, df: pd.DataFrame):
         """
@@ -49,7 +49,7 @@ class HapBar(object):
             3. other columns are group names
         :return:
         """
-        self.sample_group = sample_frame(df, 'groups')
+        self.sample_group = normalize_sample_table(df, 'groups')
 
     def merge_data(self):
         if self.sample_hap is None or self.sample_group is None:

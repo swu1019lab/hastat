@@ -7,7 +7,7 @@
 import time
 import tomli
 from hastat.log.logger import logger
-from hastat.utils.biotool import GemmaPipeline
+from hastat.utils.external import GemmaPipeline
 
 
 def run(args):

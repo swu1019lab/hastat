@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from hastat.utils.hap_cluster import cluster_haplotypes
-from hastat.viz.gene2 import FancyGene
+from hastat.utils.haplotype import cluster_haplotypes
+from hastat.viz.gene import FancyGene
 from test_hap_counts import example_inputs, example_config, labels_for
 
 
@@ -109,10 +109,14 @@ class PrefixPlotValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Hap99'):
             self.draw()
 
-    def test_retired_parameters_give_migration_message(self):
-        for key, message in [('hap_group_file','hap_color_file'),('sample_hap_file','prefix')]:
-            with self.subTest(key=key), self.assertRaisesRegex(ValueError,message):
-                self.draw(f'{key}="anything.csv"\n')
+    def test_unknown_keys_warn_and_plot_without_interpreting_their_values(self):
+        keys = ['xy', 'width', 'hap_group_file', 'misspelled_parameter']
+        with self.assertLogs('hastat', level='WARNING') as captured:
+            obj = self.draw(''.join(f'{key}="ignored"\n' for key in keys))
+        messages = [record.getMessage() for record in captured.records]
+        for key in keys:
+            self.assertIn(f"Unknown gene TOML parameter '{key}' in [default]", messages)
+        self.assertEqual(set(labels_for(obj)), {'Hap1 (n=25)', 'Hap2 (n=12)', 'Hap3 (n=3)'})
 
     def test_invalid_color_assignments_fail(self):
         for text in ['Hap1,A\nHap1,B\n','Hap1,A\nHap1,A\n','Hap1,\n','Hap1,A,extra\n']:

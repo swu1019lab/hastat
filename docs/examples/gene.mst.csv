@@ -1,0 +1,8 @@
+source,target,weight,type
+Hap1,Hap2,16,edge
+Hap1,Hap4,16,edge
+Hap1,Hap6,16,edge
+Hap2,Hap3,6,edge
+Hap4,Hap5,6,edge
+Hap4,Hap8,18,edge
+Hap6,Hap7,6,edge

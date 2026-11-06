@@ -1,4 +1,5 @@
 """Independent WC84 and VCF/CLI integration checks; run inside PBS."""
+from hastat.utils import population
 import argparse
 import ast
 from importlib.util import find_spec
@@ -18,7 +19,7 @@ import pandas as pd
 import pysam
 
 from hastat.func import view
-from hastat.utils.gene import GeneVariant
+from hastat.utils.variant import VariantData
 from test_population import write_vcf
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,10 +69,10 @@ class FstValidation(unittest.TestCase):
         path = write_vcf(self.root / f'input{self.counter}.vcf', rows, samples=samples)
         handle = pysam.VariantFile(path)
         self.addCleanup(handle.close)
-        return GeneVariant(handle), path
+        return VariantData(handle), path
 
     def calculate(self, gv, start=1, end=20, size=20, step=20, groups=(SAMPLES[:2], SAMPLES[2:])):
-        return gv.get_fst_data('chr1', start, end, list(groups[0]), list(groups[1]), size=size, step=step)
+        return population.calculate_fst(gv, 'chr1', start, end, list(groups[0]), list(groups[1]), size=size, step=step)
 
     def close(self, observed, expected):
         np.testing.assert_allclose(observed, expected, rtol=1e-11, atol=1e-12, equal_nan=True)
@@ -165,7 +166,7 @@ class FstValidation(unittest.TestCase):
                 self.calculate(gv, groups=groups)
         for samples in (None, 's1'):
             with self.assertRaises(ValueError):
-                gv.get_fst_data('chr1', 1, 1, samples, ['s3'], size=1, step=1)
+                population.calculate_fst(gv, 'chr1', 1, 1, samples, ['s3'], size=1, step=1)
         for size, step in ((0, 1), (1, 0), (1.5, 1), (1, -1)):
             with self.assertRaises(ValueError):
                 self.calculate(gv, size=size, step=step)
@@ -185,7 +186,7 @@ class FstValidation(unittest.TestCase):
             expected = np.geterr()
             self.calculate(gv)
             self.assertEqual(np.geterr(), expected)
-            with patch('hastat.utils.gene.allel.windowed_weir_cockerham_fst', side_effect=RuntimeError('injected')):
+            with patch('hastat.utils.population.allel.windowed_weir_cockerham_fst', side_effect=RuntimeError('injected')):
                 with self.assertRaises(RuntimeError):
                     self.calculate(gv)
             self.assertEqual(np.geterr(), expected)
@@ -196,7 +197,7 @@ class FstValidation(unittest.TestCase):
         rows = [(1, 'A', 'G', DIFFERENT), (2, 'A', 'G', ['./.'] * 4), (11, 'A', 'G', HETERO)]
         gv, _ = self.variant(rows)
         real = allel.windowed_weir_cockerham_fst
-        with patch('hastat.utils.gene.allel.windowed_weir_cockerham_fst', wraps=real) as call:
+        with patch('hastat.utils.population.allel.windowed_weir_cockerham_fst', wraps=real) as call:
             result = self.calculate(gv, 1, 11, 5, 5)
         self.assertEqual(call.call_count, 1)
         np.testing.assert_array_equal(call.call_args.args[0], [1, 11])
@@ -265,7 +266,7 @@ class FstValidation(unittest.TestCase):
     def test_multi_loci_api_and_cli(self):
         gv, path = self.variant([(1, 'A', 'G', DIFFERENT), (11, 'A', 'G', HETERO)])
         loci = [('chr1', 1, 5), ('chr1', 11, 11)]
-        result = gv.get_multi_loci_fst_data(loci, ['s1', 's2'], ['s3', 's4'], size=5, step=5)
+        result = population.calculate_multi_loci_fst(gv, loci, ['s1', 's2'], ['s3', 's4'], size=5, step=5)
         expected = np.vstack([self.calculate(gv, left, right, 5, 5) for _, left, right in loci])
         np.testing.assert_array_equal(result, expected)
         group = self.root / 'groups.csv'

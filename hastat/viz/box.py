@@ -14,8 +14,8 @@ from hastat.viz._export import save_figure
 from scipy import stats
 from hastat.log.logger import logger
 from matplotlib.colors import LinearSegmentedColormap
-from hastat.utils.plot_data import read_sample_csv, sample_frame, select_haplotypes, merge_samples, numeric_trait
-from hastat.utils.stat import HapAnovaTest
+from hastat.dataio.table import read_sample_csv, normalize_sample_table, select_haplotypes, merge_samples, parse_numeric_values
+from hastat.utils.association import HaplotypeAssociation
 
 BOX_METHODS = ('t-test', 'mannwhitneyu', 'welch', 'TukeyHSD', 'WelchBonferroni')
 
@@ -54,7 +54,7 @@ class HapBox(object):
         :param haplotypes: a list contained haplotype group names to be analyzed
         :return:
         """
-        self._all_sample_hap = sample_frame(df, 'haplotypes')
+        self._all_sample_hap = normalize_sample_table(df, 'haplotypes')
         self.sample_hap = select_haplotypes(self._all_sample_hap, haplotypes)
 
     def add_phe(self, df: pd.DataFrame, name: str or list = None):
@@ -68,7 +68,7 @@ class HapBox(object):
         :param name: the name of phenotype to be added
         :return:
         """
-        df = sample_frame(df, 'phenotypes')
+        df = normalize_sample_table(df, 'phenotypes')
         if name is None:
             self.sample_phe = df
         else:
@@ -154,7 +154,7 @@ class HapBox(object):
         method = 'WelchBonferroni' if self.method == 'welch' else self.method
         if method in ('TukeyHSD', 'WelchBonferroni'):
             frame = self._test_data.rename(columns={'sample': 'samples'})
-            result = HapAnovaTest(frame[['samples', name]], frame[['samples', 'haplotypes']],
+            result = HaplotypeAssociation(frame[['samples', name]], frame[['samples', 'haplotypes']],
                                   min_hap_size=self.min_hap_size, method=method)
             return {tuple(sorted((row['group1'], row['group2']))): row['p-adj']
                     for row in result.comparisons.to_dict('records')}
@@ -197,8 +197,8 @@ class HapBox(object):
         self.merge_data()
         if name in ('sample', 'haplotypes') or name not in self.sample_phe:
             raise ValueError('Select a phenotype column, not the sample column')
-        self._test_data[name] = numeric_trait(self._test_data[name])
-        self.data[name] = numeric_trait(self.data[name])
+        self._test_data[name] = parse_numeric_values(self._test_data[name])
+        self.data[name] = parse_numeric_values(self.data[name])
         x0data = self.data['haplotypes'].to_numpy()
         y0data = self.data[name].to_numpy(dtype=float)
 

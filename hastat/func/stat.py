@@ -6,7 +6,7 @@
 
 import time
 import json
-from hastat.utils.sample_data import read_sample_csv, read_assignments
+from hastat.dataio.table import read_sample_csv, read_assignments
 from prettytable.colortable import ColorTable, Themes
 from hastat.log.logger import logger
 
@@ -15,10 +15,10 @@ def run(args):
     logger.info('Start to run stat function')
     start = time.time()
 
-    from hastat.utils import stat
+    from hastat.utils.association import HaplotypeAssociation
     pheno = read_sample_csv(args.pheno)
     groups = read_assignments(args.group, label='haplotypes')
-    res = stat.HapAnovaTest(pheno, groups, args.min_hap_size, args.annotate, args.method,
+    res = HaplotypeAssociation(pheno, groups, args.min_hap_size, args.annotate, args.method,
                           alpha=getattr(args, 'alpha', 0.05))
     if args.out:
         res.comparisons.to_csv(args.out, index=False, float_format='%.17g')

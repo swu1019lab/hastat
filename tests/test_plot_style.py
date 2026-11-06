@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from hastat.viz.network import FancyNetwork
-from hastat.viz.gene2 import FancyGene
+from hastat.viz.gene import FancyGene
 from test_gene_coordinates import coordinate_inputs
 
 
@@ -51,32 +51,40 @@ class PlotStyleValidation(unittest.TestCase):
             obj=self.make_network(counts)
             fig,ax=plt.subplots(figsize=(5,4),dpi=100)
             try:
-                scatter=ax.scatter([0],[0],s=[1])
-                obj._create_legends(ax,scatter)
+                obj._legend(ax)
                 fig.canvas.draw()
                 renderer=fig.canvas.get_renderer()
                 bounds=[c.get_window_extent(renderer) for c in obj.size_legend_markers]
-                self.assertGreater(obj.legend_box.get_window_extent(renderer).x0,ax.bbox.x1)
                 for count,box,label in zip(obj._size_legend_counts(),bounds,obj.size_legend_labels):
-                    expected=np.sqrt(np.sqrt(count)*550)*fig.dpi/72
+                    expected=np.sqrt(count*550)*fig.dpi/72
                     self.assertAlmostEqual(box.width,expected,places=6)
                     self.assertGreater(label.get_window_extent(renderer).x0,box.x1)
                 for a,b in zip(bounds,bounds[1:]):
-                    self.assertFalse(a.overlaps(b))
+                    self.assertAlmostEqual(a.y0,b.y0,places=6)
+                    self.assertAlmostEqual((a.x0+a.x1)/2,(b.x0+b.x1)/2,places=6)
             finally:
                 plt.close(fig)
 
-    def test_strand_heads_are_visible_in_feature_gaps_for_both_strands(self):
+    def test_single_terminal_marker_for_both_strands(self):
         for case,sign in [('plus_flanks',1),('minus_flanks',-1)]:
             with tempfile.TemporaryDirectory() as tmp:
                 cfg,_=coordinate_inputs(Path(tmp),case)
                 obj=FancyGene(cfg); obj.plot(); obj.fig.canvas.draw()
-                directions=[p for p in obj.ax.patches if p.get_gid()=='strand-direction']
-                self.assertEqual(len(directions),2)
-                for arrow in directions:
-                    a,b=arrow._posA_posB
-                    self.assertEqual(int(np.sign(b[0]-a[0])),sign)
-                    self.assertGreater(abs(b[0]-a[0]),0)
+                markers=[t for t in obj.ax.texts if t.get_gid()=='strand-direction']
+                self.assertEqual(len(markers),1)
+                self.assertFalse([p for p in obj.ax.patches if p.get_gid()=='strand-direction'])
+                marker=markers[0]
+                self.assertEqual(marker.get_text(), '>' if sign == 1 else '<')
+                self.assertIsNone(marker.arrow_patch)
+                anchor=obj.ax.transData.transform(marker.xy)
+                blocks=[p.get_window_extent() for p in obj.ax.patches
+                        if isinstance(p,matplotlib.patches.Rectangle)][:len(obj.gene_data['CDS'])]
+                edge=max(p.xmax for p in blocks) if sign==1 else min(p.xmin for p in blocks)
+                self.assertAlmostEqual(anchor[0],edge,places=6)
+                bounds=marker.get_window_extent()
+                gap=bounds.xmin-edge if sign==1 else edge-bounds.xmax
+                self.assertGreater(gap,0)
+                self.assertEqual(marker.get_position(),(3*sign,0))
                 plt.close(obj.fig)
 
     def test_single_feature_direction_marker_is_horizontal_for_both_strands(self):
@@ -86,10 +94,9 @@ class PlotStyleValidation(unittest.TestCase):
                 gff=Path(cfg['data']['gff_file'])
                 gff.write_text(gff.read_text().replace('\t+\t',f'\t{strand}\t'))
                 obj=FancyGene(cfg); obj.plot(); obj.fig.canvas.draw()
-                marker=next(t for t in obj.ax.texts if t.get_gid()=='strand-direction')
-                a,b=marker.arrow_patch._posA_posB
-                self.assertEqual(int(np.sign(b[0]-a[0])),sign)
-                self.assertAlmostEqual(a[1],b[1],places=6)
-                self.assertGreater(abs(b[0]-a[0]),20)
+                markers=[t for t in obj.ax.texts if t.get_gid()=='strand-direction']
+                self.assertEqual(len(markers),1)
+                self.assertEqual(markers[0].get_text(), '>' if sign==1 else '<')
+                self.assertIsNone(markers[0].arrow_patch)
+                self.assertEqual(markers[0].get_position(),(3*sign,0))
                 plt.close(obj.fig)
-

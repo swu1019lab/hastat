@@ -1,17 +1,28 @@
 # Changelog
 
+## hastat 2.0.0
+
+- Reorganize Python APIs for variant data, haplotypes, population statistics,
+  and haplotype-trait association.
+- Organize gene visualization into gene.py and tracks.py.
+- Add population-aware REF/ALT frequency tracks based on called allele
+  counts, and integrate whole-population LD heatmaps into gene plots.
+- Add compact variant annotation bands with selected labels.
+- Refine shared and per-gene TOML settings, align tracks to bbox, and
+  support independent window-statistic ranges with optional gene shading.
+- Use --gene for single-gene visualization and --up/--down for flanks.
+- Improve network plots with weighted Kamada–Kawai layouts, population
+  pie nodes, proportional node areas, and nested sample-count legends.
+- Refine gene colors, single terminal strand markers, statistical labels,
+  and pie-chart typography.
+- Update complete examples, the recommended TOML configuration,
+  and the PNG gallery.
+
 ## 1.1.0 (2026-11-01)
 
-本版本修正统计计算与缺失值处理，完善单倍型分析和图形展示。
-
-- **统计分析**：修正 ANOVA 与多重比较流程，完善样本不足、零方差及不可估计情况的处理。
-- **群体遗传统计**：修正 π、Tajima’s D、Fst 的相关计算及窗口边界处理，无法计算的结果保留为 `NaN`。
-- **单倍型分析**：改进多区域分组、样本计数和跨文件位点匹配，修正 MSN 网络构建。
-- **基因单倍型图**：支持按文件前缀读取数据，自动从匹配的 `.group.csv` 添加样本数；默认采用 Hamming 距离与平均连接法聚类，改进基因方向、上下游坐标及统计轨道显示。
-- **网络图**：修复连线遮挡问题，统一群体配色，优化节点大小图例。
-- **图形导出与示例**：PDF 嵌入 TrueType 字体，SVG 保留文字对象；新增包含丰富变异和单倍型的完整示例及复现命令。
-
-**升级注意**
-
-- `AllPairTest` 已移除，请使用 `WelchBonferroni`，对应 Welch ANOVA、两两 Welch t 检验及 Bonferroni 校正。
-- 基因图配色参数 `hap_group_file` 更名为 `hap_color_file`。
+- Corrected ANOVA and multiple comparisons, including cases with small groups, zero variance or inestimable contrasts. Use `WelchBonferroni` in place of `AllPairTest` for Welch’s ANOVA followed by pairwise Welch t-tests with Bonferroni correction.
+- Corrected calculations and window boundaries for nucleotide diversity (π), Tajima’s D and Fst. Undefined estimates are reported as `NaN`.
+- Corrected haplotype grouping across regions, sample counts, variant matching across files and minimum spanning network construction.
+- Gene haplotype plots accept a file prefix and show sample counts when the matching `.group.csv` exists. Clustering uses Hamming distance and average linkage by default. Gene plots show strand direction, flanking coordinates and window statistics. Use `hap_color_file` in place of `hap_group_file` for haplotype category colors.
+- Network nodes cover their edges. Population colors match the other plots, and the size legend shows sample counts.
+- PDF exports embed TrueType fonts and SVG exports preserve text. The gallery includes complete figures and the commands to reproduce them.
