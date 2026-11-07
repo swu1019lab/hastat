@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/swu1019lab/hastat/97736b4095d4a7b1a01fccf0371c19d2ca493a08/tests/hastat.png" alt="hastat logo" width="200"/>
+<img src="https://raw.githubusercontent.com/swu1019lab/hastat/master/docs/assets/hastat.png" alt="hastat logo" width="200"/>
 
 **A Comprehensive Toolkit for Gene Haplotype Analysis in Natural Populations**
 

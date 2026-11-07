@@ -8,6 +8,7 @@ include docs/EXAMPLES.md
 include docs/gallery.html
 include docs/index.html docs/examples.html docs/.nojekyll
 recursive-include docs/assets *.css *.js
+include docs/assets/hastat.png
 recursive-include docs/examples *.csv *.gff3 *.toml *.vcf commands.sh
 include docs/examples/gene.vcf.gz docs/examples/gene.vcf.gz.tbi
 recursive-include docs/images *.png *.pdf *.svg
